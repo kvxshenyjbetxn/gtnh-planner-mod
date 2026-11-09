@@ -26,9 +26,22 @@ public class GuiOverlayButtonMixin {
     }
 
     @Unique
-    private static boolean planNH$isRecipeInGraph(final RecipeHandlerRef ref) {
-        final Recipe.RecipeId currentId = Recipe.RecipeId.of(ref.handler, ref.recipeIndex);
-        final Graph graph = Plan.getActiveGraph();
+    private Recipe.RecipeId gtnhplanner$recipeId;
+    @Unique
+    private boolean gtnhplanner$idDone;
+
+    @Unique
+    private boolean planNH$isRecipeInGraph(final RecipeHandlerRef ref) {
+        if (!gtnhplanner$idDone) {
+            gtnhplanner$idDone = true;
+            try {
+                gtnhplanner$recipeId = Recipe.RecipeId.of(ref.handler, ref.recipeIndex);
+            } catch (final RuntimeException ignored) {}
+        }
+        final Recipe.RecipeId currentId = gtnhplanner$recipeId;
+        if (currentId == null) return false;
+        final Graph graph = Plan.loadedActiveGraph();
+        if (graph == null) return false;
         for (final Node node : graph.getNodes()) {
             if (currentId.equals(node.recipeId)) {
                 return true;

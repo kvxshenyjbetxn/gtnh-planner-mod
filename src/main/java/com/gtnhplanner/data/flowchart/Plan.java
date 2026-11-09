@@ -169,6 +169,14 @@ public class Plan {
         return INSTANCE;
     }
 
+    /** The active graph if the plans are loaded, without loading or re-reading anything; null otherwise. */
+    @Nullable
+    public static Graph loadedActiveGraph() {
+        final Plan plan = INSTANCE;
+        if (plan == null || plan.activeIndex < 0 || plan.activeIndex >= plan.graphs.size()) return null;
+        return plan.graphs.get(plan.activeIndex);
+    }
+
     public static Graph getActiveGraph() {
         Plan plan = getInstance();
         if (plan.graphs.isEmpty()) {

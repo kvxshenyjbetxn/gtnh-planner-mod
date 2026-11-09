@@ -1,11 +1,15 @@
 package com.gtnhplanner.nei;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
+import codechicken.nei.ItemList;
 import codechicken.nei.recipe.Recipe;
 import codechicken.nei.recipe.RecipeHandlerRef;
 
@@ -18,6 +22,8 @@ public final class RecipeRefs {
 
     private static final List<Function<Recipe.RecipeId, RecipeHandlerRef>> FALLBACKS = new CopyOnWriteArrayList<>();
 
+    private static final Map<Recipe.RecipeId, Optional<RecipeHandlerRef>> CACHE = new ConcurrentHashMap<>();
+
     private RecipeRefs() {}
 
     public static void addFallback(final Function<Recipe.RecipeId, RecipeHandlerRef> lookup) {
@@ -27,6 +33,20 @@ public final class RecipeRefs {
     @Nullable
     public static RecipeHandlerRef of(@Nullable final Recipe.RecipeId id) {
         if (id == null) return null;
+        final Optional<RecipeHandlerRef> cached = CACHE.get(id);
+        if (cached != null) return cached.orElse(null);
+        final RecipeHandlerRef found = resolve(id);
+        if (found != null) CACHE.put(id, Optional.of(found));
+        else if (ItemList.loadFinished) CACHE.put(id, Optional.empty());
+        return found;
+    }
+
+    public static void clearCache() {
+        CACHE.clear();
+    }
+
+    @Nullable
+    private static RecipeHandlerRef resolve(final Recipe.RecipeId id) {
         final RecipeHandlerRef ref = RecipeHandlerRef.of(id);
         if (ref != null) return ref;
         for (final Function<Recipe.RecipeId, RecipeHandlerRef> f : FALLBACKS) {

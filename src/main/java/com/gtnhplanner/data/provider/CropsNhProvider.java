@@ -164,10 +164,12 @@ public final class CropsNhProvider implements PropertyProvider {
     private static codechicken.nei.recipe.RecipeHandlerRef findAgain(final codechicken.nei.recipe.Recipe.RecipeId id) {
         final NEICropsNHCropHandler crops = allCrops();
         if (crops == null) return null;
-        for (int i = 0; i < crops.arecipes.size(); i++) if (codechicken.nei.recipe.Recipe.RecipeId.of(crops, i)
-            .equals(id)) return codechicken.nei.recipe.RecipeHandlerRef.of(crops, i);
-        return null;
+        if (cropsIndex == null || cropsIndex.handler() != crops)
+            cropsIndex = new com.gtnhplanner.nei.HandlerIndex(crops);
+        return cropsIndex.find(id);
     }
+
+    private static com.gtnhplanner.nei.HandlerIndex cropsIndex;
 
     /**
      * The Crops page's recipe for the crop whose CropsNH id ({@code cropsnh:sugarBeet}) gives {@code matches}; null

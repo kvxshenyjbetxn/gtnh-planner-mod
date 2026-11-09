@@ -216,10 +216,11 @@ public final class BeeProvider implements PropertyProvider {
     private static RecipeHandlerRef findAgain(final Recipe.RecipeId id) {
         final TemplateRecipeHandler bees = allBees();
         if (bees == null) return null;
-        for (int i = 0; i < bees.arecipes.size(); i++) if (Recipe.RecipeId.of(bees, i)
-            .equals(id)) return RecipeHandlerRef.of(bees, i);
-        return null;
+        if (beesIndex == null || beesIndex.handler() != bees) beesIndex = new com.gtnhplanner.nei.HandlerIndex(bees);
+        return beesIndex.find(id);
     }
+
+    private static com.gtnhplanner.nei.HandlerIndex beesIndex;
 
     /** The bee products page's recipe for the species whose Forestry id gives {@code matches}; null when none does. */
     @Nullable

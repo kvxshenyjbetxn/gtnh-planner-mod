@@ -321,10 +321,11 @@ public final class MobDropsProvider implements PropertyProvider {
     private static RecipeHandlerRef findAgain(final Recipe.RecipeId id) {
         final TemplateRecipeHandler mobs = allMobs();
         if (mobs == null) return null;
-        for (int i = 0; i < mobs.arecipes.size(); i++) if (Recipe.RecipeId.of(mobs, i)
-            .equals(id)) return RecipeHandlerRef.of(mobs, i);
-        return null;
+        if (mobsIndex == null || mobsIndex.handler() != mobs) mobsIndex = new com.gtnhplanner.nei.HandlerIndex(mobs);
+        return mobsIndex.find(id);
     }
+
+    private static com.gtnhplanner.nei.HandlerIndex mobsIndex;
 
     /** The Mob Drops page's recipe for the crusher mob whose key gives {@code matches}; null when none does. */
     @Nullable
