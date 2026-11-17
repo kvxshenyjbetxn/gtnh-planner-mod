@@ -159,7 +159,9 @@ final class Fresh {
                     .card(n, FfPlan.GAME_RECIPE_PREFIX + id, game, n.machineConfig.getMachineCount());
                 final JsonObject site = withoutPlace(card.node());
                 site.addProperty("id", id);
-                return new JsonObject[] { site, Derived.recipe(card.recipe()) };
+                // Whole, power readings included: CloudPlans.diff strips them from both sides for a patch, but a recipe
+                // new to the plan goes as a put and the site's schema wants power.euPerTick on it.
+                return new JsonObject[] { site, card.recipe() };
             }));
         }
         for (final Drawer d : g.getDrawers()) {

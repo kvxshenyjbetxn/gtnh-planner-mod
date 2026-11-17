@@ -304,7 +304,15 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
         // A line above NEI's buttons may run to the card's edge; one beside them stops short.
         final int end = y + 8 <= heartTop ? WIDTH - 4 : TEXT_END;
         final boolean eu = rate.endsWith(" EU/t");
-        GuiDraw.drawString(rate, TEXT_X, y, eu ? 0xFF7A5200 : 0xFF303030, false);
+        GuiDraw.drawString(
+            rate,
+            TEXT_X,
+            y,
+            eu ? PlannerTabs.theme()
+                .eu()
+                : PlannerTabs.theme()
+                    .rate(),
+            false);
         String name = "";
         // An EU row's rate already says EU, and its slot shows the machine, not a resource.
         if (!eu && f.stack() != null) {
@@ -317,7 +325,13 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
         }
         final int x = TEXT_X + font.getStringWidth(rate) + 4;
         if (name == null || name.isEmpty() || x >= end) return;
-        GuiDraw.drawString(fit(font, name, end - x), x, y, 0xFF707070, false);
+        GuiDraw.drawString(
+            fit(font, name, end - x),
+            x,
+            y,
+            PlannerTabs.theme()
+                .resource(),
+            false);
     }
 
     @Override
@@ -332,7 +346,13 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
             GuiDraw.drawString(e.tier(), WIDTH - 3 - c.chip + 2, 3, 0xFF000000 | t.text(), false);
         }
         for (int i = 0; i < c.nameLines.size(); i++) {
-            GuiDraw.drawString(c.nameLines.get(i), 4, 3 + 10 * i, 0xFF202020, false);
+            GuiDraw.drawString(
+                c.nameLines.get(i),
+                4,
+                3 + 10 * i,
+                PlannerTabs.theme()
+                    .name(),
+                false);
         }
         final int heartTop = getRecipeHeight(recipe) - 27;
         int y = firstRow(c.band);
@@ -342,8 +362,20 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
         }
         if (!e.inputs()
             .isEmpty()) {
-            GuiDraw.drawRect(SLOT_X, y + 2, TEXT_END - SLOT_X, 1, 0xFFB0B0B0);
-            for (int i = 0; i < 4; i++) GuiDraw.drawRect(9 + i, y + 1 + i, 7 - 2 * i, 1, 0xFF6E6E6E);
+            GuiDraw.drawRect(
+                SLOT_X,
+                y + 2,
+                TEXT_END - SLOT_X,
+                1,
+                PlannerTabs.theme()
+                    .divider());
+            for (int i = 0; i < 4; i++) GuiDraw.drawRect(
+                9 + i,
+                y + 1 + i,
+                7 - 2 * i,
+                1,
+                PlannerTabs.theme()
+                    .arrow());
             y += DIVIDER;
         }
         for (final Flow f : e.outputs()) {

@@ -181,13 +181,27 @@ public class TankRecipeHandler extends TemplateRecipeHandler {
             && entries.get(recipe)
                 .emptying();
         final String label = emptying ? "Empty cells" : "Fill cells";
-        GuiDraw.drawString(label, 4, 3, 0xFF202020, false);
+        GuiDraw.drawString(
+            label,
+            4,
+            3,
+            PlannerTabs.theme()
+                .name(),
+            false);
         // Beside the label, not at the band's right end: NEI's favourite button sits there.
-        GuiDraw.drawString("- free, instant", 4 + GuiDraw.fontRenderer.getStringWidth(label) + 4, 3, 0xFF505050, false);
+        GuiDraw.drawString(
+            "- free, instant",
+            4 + GuiDraw.fontRenderer.getStringWidth(label) + 4,
+            3,
+            PlannerTabs.theme()
+                .free(),
+            false);
         // An arrow between inputs and outputs.
         final int y = 23;
-        GuiDraw.drawRect(56, y, 28, 2, 0xFF6E6E6E);
-        for (int i = 0; i < 4; i++) GuiDraw.drawRect(82 + i, y - 4 + i + 1, 1, 8 - 2 * i - 1, 0xFF6E6E6E);
+        final int arrow = PlannerTabs.theme()
+            .arrow();
+        GuiDraw.drawRect(56, y, 28, 2, arrow);
+        for (int i = 0; i < 4; i++) GuiDraw.drawRect(82 + i, y - 4 + i + 1, 1, 8 - 2 * i - 1, arrow);
     }
 
     /** Tells NEI's tab strip this handler's icon and size; NEI forgets them whenever it reloads its handler list. */

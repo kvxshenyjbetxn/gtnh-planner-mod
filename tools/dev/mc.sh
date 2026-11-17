@@ -143,6 +143,8 @@ start() {
     # A local site from the first moment (the website's dev:local, or the mock): a signed-in game restarted with no
     # URL would ask the real site before `call library?url=` could point it elsewhere.
     [ -n "${PLANNH_LIBRARY_URL:-}" ] && run_args+=("--mcJvmArgs=-Dgtnhplanner.library.url=$PLANNH_LIBRARY_URL")
+    # PLANNH_NEI_THEME=dark|light forces the planner's NEI tabs' palette, as a dark resource pack would pick it.
+    [ -n "${PLANNH_NEI_THEME:-}" ] && run_args+=("--mcJvmArgs=-Dgtnhplanner.neiTheme=$PLANNH_NEI_THEME")
     # JetBrains Runtime + HotswapAgent + a JDWP port so `mc.sh swap` can push recompiled classes into the game.
     [ "$HOTSWAP" = 1 ] && run_args+=(--hotswap
         "--mcJvmArgs=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:$JDWP_PORT")

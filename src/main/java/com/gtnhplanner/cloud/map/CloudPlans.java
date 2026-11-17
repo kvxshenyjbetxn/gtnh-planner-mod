@@ -74,6 +74,29 @@ public final class CloudPlans {
 
     /** The edit that turns one plan into the other, what is worked out on load left out of both ({@link Derived}). */
     public static List<LiveOp> diff(final JsonObject before, final JsonObject after) {
-        return LiveOps.diff(Derived.plan(before), Derived.plan(after));
+        final List<LiveOp> ops = LiveOps.diff(Derived.plan(before), Derived.plan(after));
+        // A recipe new to the plan goes whole, readings too: the site's schema wants power.euPerTick on every power
+        // card it is given (a patch never carries them, so an existing recipe is untouched).
+        final java.util.Map<String, JsonObject> fresh = new java.util.HashMap<>();
+        for (final LiveOp op : ops) {
+            if (op.o() != LiveOp.Kind.PUT || !"recipes".equals(op.c()) || op.v() == null) continue;
+            for (final com.google.gson.JsonElement e : LiveOps.collection(after, "recipes"))
+                if (e.isJsonObject() && op.id()
+                    .equals(idOf(e.getAsJsonObject()))) fresh.put(op.id(), e.getAsJsonObject());
+        }
+        if (fresh.isEmpty()) return ops;
+        final List<LiveOp> out = new java.util.ArrayList<>(ops.size());
+        for (final LiveOp op : ops) {
+            final JsonObject whole = op.o() == LiveOp.Kind.PUT && "recipes".equals(op.c()) ? fresh.get(op.id()) : null;
+            out.add(
+                whole == null ? op : LiveOp.put("recipes", op.id(), com.gtnhplanner.cloud.sync.LiveJson.copy(whole)));
+        }
+        return out;
+    }
+
+    private static String idOf(final JsonObject thing) {
+        return thing.has("id") && thing.get("id")
+            .isJsonPrimitive() ? thing.get("id")
+                .getAsString() : "";
     }
 }
