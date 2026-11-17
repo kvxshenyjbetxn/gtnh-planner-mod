@@ -15,15 +15,21 @@ public final class TextPopup {
     private TextPopup() {}
 
     public static Popup create(final String title, final String current, final Consumer<String> commit) {
+        return create(title, current, commit, Integer.MAX_VALUE);
+    }
+
+    /** As above, taking no more than {@code max} characters. */
+    public static Popup create(final String title, final String current, final Consumer<String> commit, final int max) {
         final int width = Math.max(160, Hyb.width(title) + 16);
         final Popup popup = new Popup("gtnhplanner_text", width, 44);
         final String[] text = { current };
         final boolean[] focused = { false };
-        final TextFieldWidget field = new SelectAllField().value(new StringValue.Dynamic(() -> text[0], typed -> {
-            text[0] = typed;
-            commit.accept(typed);
-            popup.closeIfOpen();
-        }))
+        final TextFieldWidget field = new SelectAllField().setMaxLength(max)
+            .value(new StringValue.Dynamic(() -> text[0], typed -> {
+                text[0] = typed;
+                commit.accept(typed);
+                popup.closeIfOpen();
+            }))
             .pos(6, 20)
             .size(width - 12, 16);
         field.onUpdateListener(w -> {

@@ -79,6 +79,29 @@ public final class TextArea extends Widget<TextArea> implements Interactable, IF
         return this;
     }
 
+    /**
+     * Runs on Enter, and on Esc, in place of the defaults (Enter a new line, Esc letting go); Shift+Enter is still a
+     * new line.
+     */
+    private @Nullable Runnable onEnter, onEscape;
+
+    /**
+     * Makes Enter {@code submit} the writing (Shift+Enter adds a line) and Esc {@code cancel} it; each box that does
+     * not
+     * ask keeps the defaults.
+     */
+    public TextArea submitOnEnter(final Runnable submit, final Runnable cancel) {
+        onEnter = submit;
+        onEscape = cancel;
+        return this;
+    }
+
+    /** Puts the caret after the text, as a box opened to be added to is. */
+    public TextArea caretAtEnd() {
+        caret = anchor = text.length();
+        return this;
+    }
+
     /** The colour it writes in. */
     public TextArea ink(final int colour) {
         ink = colour;
@@ -215,11 +238,13 @@ public final class TextArea extends Widget<TextArea> implements Interactable, IF
         final boolean ctrl = GuiScreen.isCtrlKeyDown(), shift = GuiScreen.isShiftKeyDown();
         switch (keyCode) {
             case Keyboard.KEY_ESCAPE -> {
-                getContext().removeFocus();
+                if (onEscape != null) onEscape.run();
+                else getContext().removeFocus();
                 return Result.SUCCESS;
             }
             case Keyboard.KEY_RETURN, Keyboard.KEY_NUMPADENTER -> {
                 if (single) getContext().removeFocus();
+                else if (onEnter != null && !shift) onEnter.run();
                 else insert("\n");
                 return Result.SUCCESS;
             }

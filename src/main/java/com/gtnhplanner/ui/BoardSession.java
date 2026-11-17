@@ -1908,10 +1908,30 @@ public final class BoardSession {
         Sfx.PAGE.play();
     }
 
+    /** The longest a plan's name is, in characters. */
+    public static final int NAME_MAX = 80;
+
     public void renameSlot(final int index, final String name) {
         if (index < 0 || index >= slots().size() || name == null || name.isBlank()) return;
+        final String trimmed = name.trim();
         slots().get(index)
-            .setName(name.trim());
+            .setName(
+                trimmed.length() > NAME_MAX ? trimmed.substring(0, NAME_MAX)
+                    .trim() : trimmed);
+        PlanAPI.save();
+        Sfx.ADJUST.play();
+    }
+
+    /** Sets a plan's description (up to 2000 characters, trailing space dropped); empty clears it. */
+    public void setSlotDescription(final int index, final String text) {
+        if (index < 0 || index >= slots().size() || text == null) return;
+        String d = text.stripTrailing();
+        if (d.length() > com.gtnhplanner.ui.popup.DescriptionPopup.MAX)
+            d = d.substring(0, com.gtnhplanner.ui.popup.DescriptionPopup.MAX)
+                .stripTrailing();
+        final Graph g = slots().get(index);
+        if (d.equals(g.getDescription())) return;
+        g.setDescription(d);
         PlanAPI.save();
         Sfx.ADJUST.play();
     }
@@ -2082,14 +2102,15 @@ public final class BoardSession {
             built += c.machines;
             most = Math.max(most, c.euPerTick);
         }
-        return peakPower ? most * Math.ceil(built - 1e-9) : sum;
+        return peakPower ? most * RailTotals.peakMachines(built, setCount(recipes.get(0).node)) : sum;
     }
 
     public double power(final CardModel card) {
         // A crop: its harvesters draw as whole machines (a farm bills its full draw), however few crops it holds.
         if (com.gtnhplanner.machines.game.CropCards.isCrop(card.node))
             return com.gtnhplanner.machines.game.CropCards.drawEut(card.node, card.machines);
-        return card.euPerTick * (peakPower ? Math.ceil(card.machines - 1e-9) : card.machines);
+        return card.euPerTick
+            * (peakPower ? RailTotals.peakMachines(card.machines, setCount(card.node)) : card.machines);
     }
 
     // endregion

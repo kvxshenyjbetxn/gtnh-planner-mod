@@ -163,6 +163,7 @@ public final class FfConverter {
             this.index = index;
             this.maker = maker;
             this.graph = new Graph(plan.name());
+            if (plan.description() != null) this.graph.setDescription(plan.description());
             this.ports = new FfCards.Ports(maker);
             this.ctx = new FfCards.Context(index, maker, plan.solveMode(), report);
             this.recipes = plan.recipesById();

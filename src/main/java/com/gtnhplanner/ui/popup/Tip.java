@@ -28,7 +28,8 @@ public final class Tip {
         KEY
     }
 
-    private record Row(String label, String value, int color) {}
+    /** {@code tier}: the label is drawn as that tier's chip, as the overview's machine lines draw theirs. */
+    private record Row(String label, String value, int color, Hyb.Tier tier) {}
 
     /**
      * A line of the body. {@code rich}: words between asterisks are drawn in gold, {@code gold} saying whether the line
@@ -78,6 +79,7 @@ public final class Tip {
     private String subtitle;
     private int titleColor = TITLE;
     private final List<Row> rows = new ArrayList<>();
+    private int columns = 1;
     private final List<Note> notes = new ArrayList<>();
     private final List<Action> actions = new ArrayList<>();
 
@@ -186,8 +188,51 @@ public final class Tip {
     }
 
     public Tip row(final String label, final String value, final int color) {
-        rows.add(new Row(label, value, color));
+        rows.add(new Row(label, value, color, null));
         return this;
+    }
+
+    /** A row whose label is the tier's chip (coloured as on the machine lines, UV and up underlined). */
+    public Tip tierRow(final String tierName, final String value) {
+        final Hyb.Tier tier = Hyb.tier(tierName);
+        if (tier == null) return row(tierName, value);
+        rows.add(new Row(tierName, value, TITLE, tier));
+        return this;
+    }
+
+    /** Lays the rows out in this many columns, row-major (1 is the plain list). */
+    public Tip columns(final int count) {
+        columns = Math.max(1, count);
+        return this;
+    }
+
+    private static final int COL_GAP = 14, CHIP_MIN_W = 24, CHIP_H = 9, TIER_LINE = 11;
+
+    private int rowLine() {
+        for (final Row r : rows) if (r.tier != null) return TIER_LINE;
+        return LINE;
+    }
+
+    private int chipW(final Row r) {
+        return r.tier == null ? 0 : Math.max(CHIP_MIN_W, Hyb.width(r.label) + 6);
+    }
+
+    /** One column's width: the widest label (or chip) and value in it, a gap between. */
+    private int rowColumnWidth() {
+        int label = 0, value = 0;
+        for (final Row r : rows) {
+            label = Math.max(label, r.tier != null ? chipW(r) : Hyb.width(r.label));
+            value = Math.max(value, Hyb.width(r.value));
+        }
+        return label + 14 + value;
+    }
+
+    private int rowsWidth() {
+        return columns * rowColumnWidth() + (columns - 1) * COL_GAP;
+    }
+
+    private int rowLines() {
+        return (rows.size() + columns - 1) / columns;
     }
 
     public Tip note(final String text) {
@@ -318,7 +363,7 @@ public final class Tip {
         int w = 0;
         for (final String line : titleLines) w = Math.max(w, Hyb.width(line));
         if (subtitle != null) w = Math.max(w, Hyb.width(subtitle));
-        for (final Row r : rows) w = Math.max(w, Hyb.width(r.label) + 14 + Hyb.width(r.value));
+        if (!rows.isEmpty()) w = Math.max(w, rowsWidth());
         for (final Note n : notes) w = Math.max(w, n.width());
         int actionsW = 0;
         for (final Action a : actions) actionsW += (actionsW == 0 ? 0 : ACTION_GAP) + actionWidth(a);
@@ -336,7 +381,7 @@ public final class Tip {
     public int height() {
         int h = LINE * titleLines.size();
         if (subtitle != null) h += LINE;
-        if (!rows.isEmpty()) h += 3 + rows.size() * LINE;
+        if (!rows.isEmpty()) h += 3 + rowLines() * rowLine();
         if (!notes.isEmpty()) {
             h += 3;
             for (final Note n : notes) h += n.height();
@@ -407,11 +452,17 @@ public final class Tip {
         }
         if (!rows.isEmpty()) {
             ty += 3;
-            for (final Row r : rows) {
-                Hyb.text(r.label, left, ty, SUBTLE);
-                Hyb.textRight(r.value, right, ty, r.color);
-                ty += LINE;
+            final int colW = rowColumnWidth(), line = rowLine();
+            for (int i = 0; i < rows.size(); i++) {
+                final Row r = rows.get(i);
+                final int cx = left + (i % columns) * (colW + COL_GAP), cy = ty + (i / columns) * line;
+                if (r.tier != null) {
+                    com.gtnhplanner.ui.card.RecipeCard
+                        .drawChip(cx, cy, chipW(r), CHIP_H, r.tier, r.label, r.tier.underline(), false);
+                } else Hyb.text(r.label, cx, cy, SUBTLE);
+                Hyb.textRight(r.value, cx + colW, cy, r.color);
             }
+            ty += rowLines() * line;
         }
         if (!notes.isEmpty()) {
             ty += 3;

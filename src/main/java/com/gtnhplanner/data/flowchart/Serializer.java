@@ -142,6 +142,8 @@ public final class Serializer {
             final JsonObject slotObj = new JsonObject();
             slotObj.addProperty("name", graph.getName());
             if (graph.getLastOpen() > 0) slotObj.addProperty("lastOpen", graph.getLastOpen());
+            if (graph.getEditedAt() > 0) slotObj.addProperty("editedAt", graph.getEditedAt());
+            if (graph.getCreatedAt() > 0) slotObj.addProperty("createdAt", graph.getCreatedAt());
             if (!graph.isOpen()) slotObj.addProperty("open", false);
             if (graph.getPostId() != null) slotObj.addProperty("postId", graph.getPostId());
             if (graph.getCloudKey() != null) slotObj.addProperty("cloudKey", graph.getCloudKey());
@@ -238,6 +240,14 @@ public final class Serializer {
                 if (obj.has("icon")) graph.setIcon(
                     obj.get("icon")
                         .getAsString());
+                // Set after the graph is built (building it and setting its name or description move editedAt). An
+                // older save has neither.
+                graph.setEditedAt(
+                    obj.has("editedAt") ? obj.get("editedAt")
+                        .getAsLong() : graph.getLastOpen());
+                graph.setCreatedAt(
+                    obj.has("createdAt") ? obj.get("createdAt")
+                        .getAsLong() : 0);
                 // What was read is the graph's encoding until it changes: the first save after loading encodes only
                 // what has been edited since, not every plan.
                 if (graph.getUnreadable() == null) KEPT.put(

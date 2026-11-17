@@ -24,7 +24,30 @@ import javax.annotation.Nullable;
  */
 public record FfPlan(String name, boolean solveMode, boolean poolMode, boolean planMode, List<FfRecipe> recipes,
     List<FfNode> nodes, List<FfEdge> edges, List<FfStorage> storages, List<FfNote> textNotes,
-    @Nullable FfTarget targetRate, List<String> notes, List<FfBoard> boards, Map<String, String> boardOf) {
+    @Nullable FfTarget targetRate, List<String> notes, List<FfBoard> boards, Map<String, String> boardOf,
+    String description) {
+
+    /** A plan with boards and no description. */
+    public FfPlan(final String name, final boolean solveMode, final boolean poolMode, final boolean planMode,
+        final List<FfRecipe> recipes, final List<FfNode> nodes, final List<FfEdge> edges,
+        final List<FfStorage> storages, final List<FfNote> textNotes, @Nullable final FfTarget targetRate,
+        final List<String> notes, final List<FfBoard> boards, final Map<String, String> boardOf) {
+        this(
+            name,
+            solveMode,
+            poolMode,
+            planMode,
+            recipes,
+            nodes,
+            edges,
+            storages,
+            textNotes,
+            targetRate,
+            notes,
+            boards,
+            boardOf,
+            "");
+    }
 
     /** A plan without boards. */
     public FfPlan(final String name, final boolean solveMode, final boolean poolMode, final boolean planMode,

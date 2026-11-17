@@ -145,6 +145,52 @@ public class Plan {
         return order;
     }
 
+    /** The orders the Library lists plans in. */
+    public enum Sort {
+
+        LAST_OPENED("Last opened"),
+        LAST_EDITED("Last edited"),
+        NAME("Name"),
+        NEWEST("Newest");
+
+        public final String label;
+
+        Sort(final String label) {
+            this.label = label;
+        }
+    }
+
+    /**
+     * The slots' indices in {@code sort} order. Last opened is {@link #byRecency}; the others keep that order among
+     * equals: last edited newest first (a plan never edited counts from when it was last open), name A to Z ignoring
+     * case, newest made first (a plan with no made time last).
+     */
+    public List<Integer> ordered(final Sort sort) {
+        final List<Integer> order = byRecency();
+        switch (sort) {
+            case LAST_EDITED -> order.sort(
+                (a, b) -> Long.compare(
+                    graphs.get(b)
+                        .lastEdited(),
+                    graphs.get(a)
+                        .lastEdited()));
+            case NAME -> order.sort(
+                (a, b) -> graphs.get(a)
+                    .getName()
+                    .compareToIgnoreCase(
+                        graphs.get(b)
+                            .getName()));
+            case NEWEST -> order.sort(
+                (a, b) -> Long.compare(
+                    graphs.get(b)
+                        .getCreatedAt(),
+                    graphs.get(a)
+                        .getCreatedAt()));
+            default -> {}
+        }
+        return order;
+    }
+
     /**
      * The undo history of the slot {@code graph} is; it survives undo and redo swapping the graph. Cloud plans keep
      * none here: their undo is the player's own edits' inverses.
@@ -198,6 +244,8 @@ public class Plan {
             read.setName(g.getName());
             read.setOpen(g.isOpen());
             read.setLastOpen(g.getLastOpen());
+            read.setEditedAt(g.getEditedAt());
+            read.setCreatedAt(g.getCreatedAt());
             graphs.set(index, read);
             com.gtnhplanner.GtnhPlanner.LOG.info("Slot '{}' read on a second try", g.getName());
         } catch (final RuntimeException e) {

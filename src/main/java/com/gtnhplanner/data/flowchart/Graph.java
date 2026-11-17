@@ -70,6 +70,24 @@ public class Graph {
     private long lastOpen;
 
     /**
+     * When the plan was last edited (ms since the epoch): moved by every edit, never by opening or looking. Saved with
+     * the slot, local only.
+     */
+    @Getter
+    @Setter
+    private transient long editedAt;
+
+    /** When the plan was last edited; a plan never edited counts from when it was last open. */
+    public long lastEdited() {
+        return editedAt > 0 ? editedAt : lastOpen;
+    }
+
+    /** When the plan was made (ms since the epoch); 0 for a plan saved before this was kept. Saved with the slot. */
+    @Getter
+    @Setter
+    private transient long createdAt = System.currentTimeMillis();
+
+    /**
      * The settings each machine's cards show on themselves, pinned from the settings sheet: machine (a card's
      * {@code SettingPins.machine}) to setting keys, in order. A machine missing here shows its defaults. Saved with the
      * plan, so it looks the same wherever it is opened.
@@ -280,6 +298,7 @@ public class Graph {
         this.panY = old.panY;
         this.snapToGrid = old.snapToGrid;
         this.lastOpen = old.lastOpen;
+        this.createdAt = old.createdAt;
         this.open = old.open;
         this.postId = old.postId;
         this.cloudKey = old.cloudKey;
@@ -292,6 +311,7 @@ public class Graph {
     void takeSlotOf(final Graph replaced) {
         this.slot = replaced.slot;
         this.lastOpen = replaced.lastOpen;
+        this.createdAt = replaced.createdAt;
         this.open = replaced.open;
         this.postId = replaced.postId;
         this.cloudKey = replaced.cloudKey;
@@ -301,6 +321,7 @@ public class Graph {
     }
 
     private void bumpVersion() {
+        editedAt = System.currentTimeMillis();
         version = VERSIONS.incrementAndGet();
         solveVersion = version;
     }
@@ -348,6 +369,7 @@ public class Graph {
      * {@link #version()} but not {@link #solveVersion()}, so nothing is re-solved.
      */
     public void touchLayout() {
+        editedAt = System.currentTimeMillis();
         version = VERSIONS.incrementAndGet();
     }
 

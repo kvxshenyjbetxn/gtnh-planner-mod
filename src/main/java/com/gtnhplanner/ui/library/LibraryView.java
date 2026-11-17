@@ -52,6 +52,9 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         { "new", "Newest" }, { "downloads", "Most downloaded" }, { "machines", "Most machines" },
         { "power", "Highest power" }, { "lowPower", "Lowest power" }, { "tier", "Highest tier" },
         { "commented", "Latest comment" } };
+    /** How My plans is ordered; kept while the game runs, not saved. */
+    private static Plan.Sort mySort = Plan.Sort.LAST_OPENED;
+
     private static final String[] TIERS = { "ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV",
         "UIV", "UMV", "UXV", "MAX" };
 
@@ -82,6 +85,7 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
 
     private enum Kind {
         SORT,
+        MY_SORT,
         TIER,
         VERSION,
         CLOSE,
@@ -357,6 +361,7 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         int right = w - PAD;
         right = closeKey(right, 4, Kind.CLOSE, hover) - 8;
         if (mine) {
+            if (shelf == Shelf.MINE) right = key(right, mySort.label, Kind.MY_SORT, hover) - 8;
             searchField.pos(x, 5)
                 .size(Math.max(80, Math.min(240, right - x)), 14);
             return;
@@ -616,7 +621,7 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         final String f = searchText.trim()
             .toLowerCase(Locale.ROOT);
         final List<Integer> shown = new ArrayList<>();
-        for (final int i : plan.byRecency()) {
+        for (final int i : plan.ordered(sharedShelf ? Plan.Sort.LAST_OPENED : mySort)) {
             final boolean theirs = cloud != null && cloud.shared(graphs.get(i));
             if (theirs != sharedShelf) continue;
             if (f.isEmpty() || graphs.get(i)
@@ -687,6 +692,10 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         final String size = tasks ? count + (count == 1 ? " task" : " tasks")
             : cards + (cards == 1 ? " card" : " cards") + " · " + drawers + (drawers == 1 ? " drawer" : " drawers");
         Hyb.text(Hyb.fit(size, x + w - 6 - (x + 34)), x + 34, y + 17, 0xFF8A8C94);
+        // The first line of its description, when it has one.
+        final String blurb = g.getDescription()
+            .split("\\R", 2)[0].trim();
+        if (!blurb.isEmpty()) Hyb.text(Hyb.fit(blurb, x + w - 6 - (x + 34)), x + 34, y + 27, Hyb.MUTED);
         final String when = g.getLastOpen() > 0 ? "last open " + agoMs(g.getLastOpen()) : "not opened yet";
         Hyb.text(when, x + 6, y + TILE_H - 13, Hyb.MUTED);
         // A plan someone shared with the player says whose it is.
@@ -732,8 +741,20 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
                 "Rename",
                 () -> Popup.open(
                     getPanel(),
-                    com.gtnhplanner.ui.popup.TextPopup
-                        .create("Plan name", g.getName(), name -> session.renameSlot(slot, name)),
+                    com.gtnhplanner.ui.popup.TextPopup.create(
+                        "Plan name",
+                        g.getName(),
+                        name -> session.renameSlot(slot, name),
+                        BoardSession.NAME_MAX),
+                    sx,
+                    sy)));
+        rows.add(
+            PickList.Entry.of(
+                "Edit description",
+                () -> Popup.open(
+                    getPanel(),
+                    com.gtnhplanner.ui.popup.DescriptionPopup
+                        .create(g.getDescription(), text -> session.setSlotDescription(slot, text)),
                     sx,
                     sy)));
         rows.add(
@@ -952,6 +973,12 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
             }
             case PANE_CLOSE -> pick(null);
             case MAKES_CLEAR -> refilter(q.withMakes(List.of()));
+            case MY_SORT -> {
+                final List<PickList.Entry> rows = new ArrayList<>();
+                for (final Plan.Sort s : Plan.Sort.values())
+                    rows.add(new PickList.Entry(null, s.label, "", Hyb.INK, s == mySort, () -> mySort = s));
+                dropdown("gtnhplanner_library_my_sort", rows, hit);
+            }
             case SORT -> {
                 final List<PickList.Entry> rows = new ArrayList<>();
                 for (final String[] s : SORTS) rows.add(

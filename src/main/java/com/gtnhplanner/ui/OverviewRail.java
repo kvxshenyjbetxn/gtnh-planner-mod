@@ -86,6 +86,8 @@ final class OverviewRail extends ParentWidget<OverviewRail>
         RULE,
         RATE,
         PEAK,
+        /** The machines' draw in the MACHINES bar: hover for the amps it makes at each voltage tier; a click folds. */
+        DRAW,
         GROUP,
         MACHINE,
         /** A machine line's count: click to type a pinned count, as on the card. */
@@ -1082,6 +1084,9 @@ final class OverviewRail extends ParentWidget<OverviewRail>
         final String drawn = Hyb.width(draw + " EU/t") <= px - 5 - headEnd - 4 ? draw + " EU/t"
             : Hyb.width(draw) <= px - 5 - headEnd - 4 ? draw : "";
         Hyb.textRight(drawn, px - 5, y - SECTION_H + 2, Hyb.MUTED);
+        if (!drawn.isEmpty()) hits.add(
+            hits.size() - 1,
+            new Hit(Kind.DRAW, px - 5 - Hyb.width(drawn), y - SECTION_H + 1, px - 5, y - 1, t.euPerTick()));
         if (folded.contains("MACHINES")) return y + GAP;
 
         if (t.euMade() > 0) {
@@ -1450,6 +1455,10 @@ final class OverviewRail extends ParentWidget<OverviewRail>
                 getContext().focus(this);
             }
             case PEAK -> session.togglePeakPower();
+            case DRAW -> {
+                if (!folded.remove("MACHINES")) folded.add("MACHINES");
+                PlannerSettings.setOverviewFolded(folded);
+            }
             case GROUP -> flyToGroup((String) hit.data());
             case PIN -> {
                 final com.gtnhplanner.ui.card.RecipeCard card = cardOf(
@@ -1656,6 +1665,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
      */
     com.gtnhplanner.ui.popup.Tip hoverTip() {
         final Hit hit = hitAtMouseFromLastFrame();
+        if (hit != null && hit.kind() == Kind.DRAW && hit.data() instanceof final Double euT) return drawTip(euT);
         if (hit != null && hit.kind() == Kind.SPARE) {
             final BoardSession.SpareLine line = (BoardSession.SpareLine) hit.data();
             final SpareBar.Hit at = spareHitAt(hit);
@@ -1684,6 +1694,27 @@ final class OverviewRail extends ParentWidget<OverviewRail>
         return com.gtnhplanner.ui.popup.Tip.ofLines(hoverLines());
     }
 
+    /** The machines' draw as amps at every voltage tier (no overclock): the figure the bar shows over each voltage. */
+    private com.gtnhplanner.ui.popup.Tip drawTip(final double euT) {
+        final com.gtnhplanner.ui.popup.Tip tip = com.gtnhplanner.ui.popup.Tip
+            .of((session.peakPower() ? "Peak draw" : "Average draw") + " · " + Fmt.power(euT) + " EU/t")
+            .sub("Equivalent amps by voltage tier")
+            .columns(2);
+        final String[] names = com.gtnhplanner.machines.web.Tiers.NAMES;
+        final double[] volts = com.gtnhplanner.machines.web.Tiers.MAX_EUT;
+        for (int i = 0; i < names.length; i++) tip.tierRow(names[i], ampsText(euT / volts[i]));
+        return tip;
+    }
+
+    /** Amps for the tip: scientific with one decimal below 1e-5 (compact reads nothing there), else compact. */
+    static String ampsText(final double amps) {
+        if (amps > 0 && amps < 1e-5) {
+            final int exp = (int) Math.floor(Math.log10(amps));
+            return String.format(java.util.Locale.ROOT, "%.1fe%d A", amps / Math.pow(10, exp), exp);
+        }
+        return Fmt.compact(amps) + " A";
+    }
+
     /**
      * What the mouse is on, as lines: the tip of most rows, and for every row what the tip waits on (it shows once
      * these have stayed the same a moment).
@@ -1695,7 +1726,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
         final Fmt.RateUnit unit = session.rateUnit();
         return switch (hit.kind()) {
             case FOLD -> List.of(isOpen() ? "Fold the overview" : "Open the overview");
-            case SCROLLBAR -> null;
+            case SCROLLBAR, DRAW -> null;
             case ADD -> List.of(
                 inputs.contains(hit.data()) ? "Add a source drawer for it" : "Add a product drawer for it",
                 hint + "Connected to every unwired port of it");

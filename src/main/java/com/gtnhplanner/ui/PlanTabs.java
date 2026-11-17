@@ -699,7 +699,20 @@ final class PlanTabs extends Widget<PlanTabs> implements Interactable {
                 "Rename",
                 () -> Popup.open(
                     getPanel(),
-                    TextPopup.create("Plan name", g.getName(), name -> session.renameSlot(slot, name)),
+                    TextPopup.create(
+                        "Plan name",
+                        g.getName(),
+                        name -> session.renameSlot(slot, name),
+                        BoardSession.NAME_MAX),
+                    sx,
+                    sy)));
+        rows.add(
+            PickList.Entry.of(
+                "Edit description",
+                () -> Popup.open(
+                    getPanel(),
+                    com.gtnhplanner.ui.popup.DescriptionPopup
+                        .create(g.getDescription(), text -> session.setSlotDescription(slot, text)),
                     sx,
                     sy)));
         rows.add(

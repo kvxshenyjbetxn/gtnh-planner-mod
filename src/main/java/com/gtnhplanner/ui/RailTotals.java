@@ -23,6 +23,15 @@ final class RailTotals {
 
     private RailTotals() {}
 
+    /**
+     * The machines a peak draw counts: the whole machines the solver runs, or the count the player set where that is
+     * more (a capped card runs part of its machines now, and draws for all of them at peak). Nothing running is 0.
+     */
+    static double peakMachines(final double running, final double set) {
+        if (running <= 1e-9) return 0;
+        return Math.max(Math.ceil(running - 1e-9), set);
+    }
+
     /** The three lists of resource lines. */
     record Lines<L> (List<L> inputs, List<L> outputs, List<L> internal) {}
 

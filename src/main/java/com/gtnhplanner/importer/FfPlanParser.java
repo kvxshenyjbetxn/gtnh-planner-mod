@@ -134,7 +134,8 @@ public final class FfPlanParser {
             targetRate,
             notes,
             ffBoards,
-            boardOf);
+            boardOf,
+            str(root, "description", ""));
         return migrateTrashCans(plan);
     }
 
@@ -672,7 +673,8 @@ public final class FfPlanParser {
             plan.targetRate(),
             notes,
             plan.boards(),
-            plan.boardOf());
+            plan.boardOf(),
+            plan.description());
     }
 
     private static String encode(final String id) {

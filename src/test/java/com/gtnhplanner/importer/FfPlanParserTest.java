@@ -324,6 +324,18 @@ class FfPlanParserTest {
     }
 
     @Test
+    void readsThePlansDescription() {
+        final FfPlan plan = FfPlanParser.parse("""
+            {"name": "D", "description": "Line one\\nLine two", "recipes": [], "nodes": [], "edges": []}""");
+        assertEquals("Line one\nLine two", plan.description());
+        assertEquals(
+            "",
+            FfPlanParser.parse("""
+                {"name": "D", "recipes": [], "nodes": [], "edges": []}""")
+                .description());
+    }
+
+    @Test
     void turnsLegacyTrashCansIntoTrashDrawers() {
         final FfPlan plan = FfPlanParser.parse("""
             {"name": "T",
