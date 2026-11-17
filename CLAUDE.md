@@ -16,8 +16,6 @@ solved in the background (`data/flowchart/balancer/`, `SolveService`), auto-layo
 - `main` is our trunk and the fork's default branch; it started from upstream `dev` (a0896df). The other branches
   on the fork are untouched copies of upstream's. The plan is to gut and rebuild the codebase in our own image, so
   upstream's branches, bugs and CI are not our concern; don't spend effort on them.
-- Changing the mod is fine when it makes developing or testing easier (hooks, debug output, testability
-  refactors). Don't do end-user work yet (UX polish, features, user-facing bug fixes): it is all going to change.
 - Dev tooling lives in `src/main/java/com/gtnhplanner/dev/`, `tools/dev/` and `docs/`; it is wired in through
   `DevHarness.initIfDev()` in `ClientProxy#init`.
 
