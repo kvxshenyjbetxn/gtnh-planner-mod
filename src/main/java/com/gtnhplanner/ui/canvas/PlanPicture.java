@@ -226,48 +226,66 @@ public final class PlanPicture {
             matrices = true;
             GL11.glColorMask(true, true, true, true);
             GL11.glDepthMask(true);
-            // A transparent picture clears to nothing, in the paper's colour so soft edges blend towards it.
-            GL11.glClearColor(
-                (Hyb.CANVAS >> 16 & 0xFF) / 255f,
-                (Hyb.CANVAS >> 8 & 0xFF) / 255f,
-                (Hyb.CANVAS & 0xFF) / 255f,
-                o.transparent() ? 0f : 1f);
-            GL11.glClearDepth(1);
-            GL11.glClearStencil(0);
-            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_STENCIL_BUFFER_BIT);
+            // A transparent picture is drawn twice, on black and on white, and told apart by matte(): the widgets'
+            // own blend functions leave the framebuffer's alpha wrong. Any other picture is drawn once, on the paper.
+            final int[] backs = o.transparent() ? new int[] { 0xFF000000, 0xFFFFFFFF }
+                : new int[] { 0xFF000000 | Hyb.CANVAS };
+            final BufferedImage image = new BufferedImage(
+                pw,
+                ph,
+                o.transparent() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+            final int[] out = ((DataBufferInt) image.getRaster()
+                .getDataBuffer()).getData();
+            int[] onWhite = null;
+            for (int pass = 0; pass < backs.length; pass++) {
+                GL11.glClearColor(
+                    (backs[pass] >> 16 & 0xFF) / 255f,
+                    (backs[pass] >> 8 & 0xFF) / 255f,
+                    (backs[pass] & 0xFF) / 255f,
+                    1f);
+                GL11.glClearDepth(1);
+                GL11.glClearStencil(0);
+                GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_STENCIL_BUFFER_BIT);
 
-            // The board, drawn by itself: the camera framing the plan, the canvas as big as the picture's board.
-            g.setZoom(zoom);
-            g.setPanX(-(b[0] - MARGIN) * zoom);
-            g.setPanY(-(b[1] - MARGIN) * zoom);
-            area.x = area.rx = (width - boardW) / 2;
-            area.y = area.ry = 0;
-            area.width = boardW;
-            area.height = boardH;
-            final ModularGuiContext context = canvas.getContext();
-            context.pushMatrix();
-            context.resetCurrent();
-            drawing = true;
-            bare = o.transparent();
-            noNotes = !o.annotations();
-            try {
-                WidgetTree.drawTree(canvas, context, true, true);
-            } finally {
-                drawing = false;
-                bare = false;
-                noNotes = false;
-                context.popMatrix();
+                // The board, drawn by itself: the camera framing the plan, the canvas as big as the picture's board.
+                g.setZoom(zoom);
+                g.setPanX(-(b[0] - MARGIN) * zoom);
+                g.setPanY(-(b[1] - MARGIN) * zoom);
+                area.x = area.rx = (width - boardW) / 2;
+                area.y = area.ry = 0;
+                area.width = boardW;
+                area.height = boardH;
+                final ModularGuiContext context = canvas.getContext();
+                context.pushMatrix();
+                context.resetCurrent();
+                drawing = true;
+                bare = o.transparent();
+                noNotes = !o.annotations();
+                try {
+                    WidgetTree.drawTree(canvas, context, true, true);
+                } finally {
+                    drawing = false;
+                    bare = false;
+                    noNotes = false;
+                    context.popMatrix();
+                }
+
+                // Under it the footer, and the mark: over the board's corner, or in the footer.
+                GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
+                GL11.glDisable(GL11.GL_SCISSOR_TEST);
+                GL11.glDisable(GL11.GL_STENCIL_TEST);
+                GL11.glColor4f(1, 1, 1, 1);
+                if (footer != null) footer.draw(boardH);
+                else mark(width, boardH);
+
+                if (pass == 0) read(pw, ph, out);
+                else {
+                    onWhite = new int[pw * ph];
+                    read(pw, ph, onWhite);
+                }
             }
-
-            // Under it the footer, and the mark: over the board's corner, or in the footer.
-            GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
-            GL11.glDisable(GL11.GL_SCISSOR_TEST);
-            GL11.glDisable(GL11.GL_STENCIL_TEST);
-            GL11.glColor4f(1, 1, 1, 1);
-            if (footer != null) footer.draw(boardH);
-            else mark(width, boardH);
-
-            return read(pw, ph, o.transparent());
+            if (onWhite != null) matte(out, onWhite);
+            return image;
         } catch (final RuntimeException | Error e) {
             // A throw mid-draw can leave a tessellator batch open, which would break the game's next draw: flush it
             // into the throwaway framebuffer ("Not tesselating!" just means there was none).
@@ -305,23 +323,40 @@ public final class PlanPicture {
         }
     }
 
-    /** The framebuffer as an image, top row first (GL's rows run bottom-up). */
-    private static BufferedImage read(final int pw, final int ph, final boolean alpha) {
+    /** The framebuffer's pixels into {@code out}, as 0xAARRGGBB, top row first (GL's rows run bottom-up). */
+    private static void read(final int pw, final int ph, final int[] out) {
         final ByteBuffer bytes = BufferUtils.createByteBuffer(pw * ph * 4);
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 4);
         GL11.glReadPixels(0, 0, pw, ph, GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, bytes);
         final IntBuffer pixels = bytes.asIntBuffer();
-        final BufferedImage image = new BufferedImage(
-            pw,
-            ph,
-            alpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
-        final int[] out = ((DataBufferInt) image.getRaster()
-            .getDataBuffer()).getData();
         for (int y = 0; y < ph; y++) {
             pixels.position(y * pw);
             pixels.get(out, (ph - 1 - y) * pw, pw);
         }
-        return image;
+    }
+
+    /**
+     * Recovers colour and alpha from one picture drawn on black and the same drawn on white; the result goes into
+     * {@code onBlack} (ARGB). A pixel of alpha A shows A*colour on black and A*colour + (1-A) on white, so A is one
+     * minus how much the two differ, and the colour is the black one divided by A. The framebuffer's own alpha is not
+     * used.
+     */
+    static void matte(final int[] onBlack, final int[] onWhite) {
+        for (int i = 0; i < onBlack.length; i++) {
+            final int b = onBlack[i], w = onWhite[i];
+            final int br = b >> 16 & 0xFF, bg = b >> 8 & 0xFF, bb = b & 0xFF;
+            final int diff = (w >> 16 & 0xFF) - br + (w >> 8 & 0xFF) - bg + (w & 0xFF) - bb;
+            final float a = Math.max(0f, Math.min(1f, 1f - diff / 765f));
+            if (a <= 1f / 255f) {
+                onBlack[i] = 0;
+                continue;
+            }
+            onBlack[i] = Math.round(a * 255f) << 24 | unmult(br, a) << 16 | unmult(bg, a) << 8 | unmult(bb, a);
+        }
+    }
+
+    private static int unmult(final int premultiplied, final float a) {
+        return Math.max(0, Math.min(255, Math.round(premultiplied / a)));
     }
 
     /** The board's GUI scale: the picture is drawn in its pixels. */
