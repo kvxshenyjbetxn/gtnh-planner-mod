@@ -19,7 +19,6 @@ import com.gtnhplanner.data.provider.gregtech.GTHooks;
 import com.gtnhplanner.power.Energy;
 import com.gtnhplanner.power.PowerSearch;
 import com.gtnhplanner.power.game.PowerPorts;
-import com.gtnhplanner.ui.theme.Fmt;
 import com.gtnhplanner.ui.theme.Hyb;
 
 import codechicken.lib.gui.GuiDraw;
@@ -37,10 +36,10 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
 
     public static final String ID = "gtnhplanner.generators";
 
-    private static final int WIDTH = 166, HEIGHT = 50, PER_PAGE = 3;
+    private static final int WIDTH = 166, HEIGHT = 56, PER_PAGE = 3;
     private static final int ROWS = 2;
-    private static final int[] ROW_Y = { 13, 31 };
-    private static final int LEFT_SLOT = 2, LEFT_TEXT = 21, ARROW_W = 14, RIGHT_LIMIT = WIDTH - 14;
+    private static final int[] ROW_Y = { 16, 34 };
+    private static final int LEFT_SLOT = 4, LEFT_TEXT = 24, ARROW_W = 9, RIGHT_LIMIT = WIDTH - 13;
     /** The right text keeps at least this much room, so the left text room is capped. */
     private static final int MIN_RIGHT_TEXT = 44;
 
@@ -48,7 +47,7 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
     private record Layout(int leftRoom, int arrowX, int rightSlotX, int rightTextX) {}
 
     private static Layout layout(final net.minecraft.client.gui.FontRenderer font, final Entry e) {
-        final int fixed = LEFT_TEXT + 2 + ARROW_W + 2 + 16 + 3;
+        final int fixed = LEFT_TEXT + 1 + ARROW_W + 1 + 17 + 2;
         final int cap = Math.max(0, RIGHT_LIMIT - MIN_RIGHT_TEXT - fixed);
         int room = 0;
         for (int i = 0; i < ROWS && i < e.inputs()
@@ -64,9 +63,9 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
                         .rate() + tail));
         }
         room = Math.min(room, cap);
-        final int arrowX = LEFT_TEXT + room + 2;
-        final int slotX = arrowX + ARROW_W + 2;
-        return new Layout(room, arrowX, slotX, slotX + 16 + 3);
+        final int arrowX = LEFT_TEXT + room + 1;
+        final int slotX = arrowX + ARROW_W + 1;
+        return new Layout(room, arrowX, slotX, slotX + 17 + 2);
     }
 
     /** One flow of an entry: what it is as NEI shows it (null for EU) and its rate as text. */
@@ -156,19 +155,34 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
             outs);
     }
 
+    /** A rate to three significant figures with k, M, G (34.7, 2.05k, 24.6k), so it fits beside its slot. */
+    static String brief(final double value) {
+        final String[] units = { "", "k", "M", "G", "T" };
+        double v = Math.abs(value);
+        int u = 0;
+        while (v >= 999.5 && u < units.length - 1) {
+            v /= 1000;
+            u++;
+        }
+        final String digits = v >= 99.95 ? String.format(Locale.ROOT, "%.0f", v)
+            : v >= 9.995 ? String.format(Locale.ROOT, "%.1f", v) : String.format(Locale.ROOT, "%.2f", v);
+        final String trimmed = digits.contains(".") ? digits.replaceAll("\\.?0+$", "") : digits;
+        return (value < 0 ? "-" : "") + trimmed + units[u];
+    }
+
     @Nullable
     private static Flow flow(final Port<?> port) {
         final double perSecond = port.amount();
         final Object value = port.getValue();
-        if (value instanceof Energy) return new Flow(null, Fmt.compact(perSecond / 20) + " EU/t");
+        if (value instanceof Energy) return new Flow(null, brief(perSecond / 20) + " EU/t");
         if (value instanceof final FluidStack fluid) {
             final ItemStack shown = com.gtnhplanner.Compat.GREGTECH.isLoaded ? GTHooks.fluidDisplayStack(fluid) : null;
-            return shown == null ? null : new Flow(shown, Fmt.compact(perSecond) + " L/s");
+            return shown == null ? null : new Flow(shown, brief(perSecond) + " L/s");
         }
         if (value instanceof final ItemStack item) {
             final ItemStack shown = item.copy();
             shown.stackSize = 1;
-            return new Flow(shown, Fmt.compact(perSecond) + "/s");
+            return new Flow(shown, brief(perSecond) + "/s");
         }
         return null;
     }
@@ -258,7 +272,14 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
     }
 
     @Override
-    public void drawBackground(final int recipe) {}
+    public void drawBackground(final int recipe) {
+        if (recipe < 0 || recipe >= arecipes.size()) return;
+        PlannerTabs.panel(0, 0, WIDTH, 52);
+        PlannerTabs.headerBand(1, 1, WIDTH - 2, 12);
+        final CachedRecipe c = arecipes.get(recipe);
+        for (final PositionedStack s : c.getIngredients()) PlannerTabs.slot(s.relx, s.rely);
+        for (final PositionedStack s : c.getOtherStacks()) PlannerTabs.slot(s.relx, s.rely);
+    }
 
     private static String fit(final net.minecraft.client.gui.FontRenderer font, final String text, final int room) {
         if (font.getStringWidth(text) <= room) return text;
@@ -279,7 +300,13 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
             final int x = f.stack() == null ? slotX : textX;
             final String tail = i == ROWS - 1 && extra > 0 ? " +" + extra : "";
             text = fit(font, text, right - x - font.getStringWidth(tail)) + tail;
-            GuiDraw.drawString(text, x, ROW_Y[i] + 4, 0xFF404040, false);
+            GuiDraw.drawString(
+                text,
+                x,
+                ROW_Y[i] + 4,
+                f.rate()
+                    .endsWith(" EU/t") ? 0xFF7A5200 : 0xFF303030,
+                false);
         }
     }
 
@@ -294,15 +321,15 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
             .isEmpty()) {
             final Hyb.Tier t = Hyb.tier(e.tier());
             chip = font.getStringWidth(e.tier()) + 4;
-            GuiDraw.drawRect(WIDTH - chip, 1, chip, 10, 0xFF000000 | t.bg());
-            GuiDraw.drawString(e.tier(), WIDTH - chip + 2, 2, 0xFF000000 | t.text(), false);
+            GuiDraw.drawRect(WIDTH - 3 - chip, 2, chip, 10, 0xFF000000 | t.bg());
+            GuiDraw.drawString(e.tier(), WIDTH - 3 - chip + 2, 3, 0xFF000000 | t.text(), false);
         }
-        GuiDraw.drawString(fit(font, e.name(), WIDTH - 2 - (chip == 0 ? 0 : chip + 4)), 2, 2, 0xFF404040, false);
+        GuiDraw.drawString(fit(font, e.name(), WIDTH - 3 - 4 - (chip == 0 ? 0 : chip + 4)), 4, 3, 0xFF202020, false);
         // An arrow between inputs and outputs, level with the middle of the rows.
         final Layout l = ((Cached) arecipes.get(recipe)).layout;
         final int y = (ROW_Y[0] + ROW_Y[ROWS - 1] + 16) / 2;
-        GuiDraw.drawRect(l.arrowX(), y - 1, 10, 2, 0xFF8B8B8B);
-        for (int i = 0; i < 4; i++) GuiDraw.drawRect(l.arrowX() + 10 + i, y - 4 + i, 1, 8 - 2 * i, 0xFF8B8B8B);
+        GuiDraw.drawRect(l.arrowX(), y - 1, 5, 2, 0xFF6E6E6E);
+        for (int i = 0; i < 4; i++) GuiDraw.drawRect(l.arrowX() + 5 + i, y - 4 + i, 1, 8 - 2 * i, 0xFF6E6E6E);
         drawSide(font, e.inputs(), LEFT_SLOT, LEFT_TEXT, LEFT_TEXT + l.leftRoom());
         // Stop short of NEI's column of buttons at the right edge.
         drawSide(font, e.outputs(), l.rightSlotX(), l.rightTextX(), RIGHT_LIMIT);

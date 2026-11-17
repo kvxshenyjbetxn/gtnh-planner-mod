@@ -99,13 +99,13 @@ public class TankRecipeHandler extends TemplateRecipeHandler {
             final ItemStack litres = Compat.GREGTECH.isLoaded ? GTHooks.fluidDisplayStackWithAmount(e.fluid) : null;
             final ItemStack fluid = litres == null ? e.cell : litres;
             if (e.emptying) {
-                in.add(new PositionedStack(e.cell, 28, 4, false));
-                result = new PositionedStack(fluid, 108, 4, false);
-                more.add(new PositionedStack(e.empty, 130, 4, false));
+                in.add(new PositionedStack(e.cell, 28, 16, false));
+                result = new PositionedStack(fluid, 108, 16, false);
+                more.add(new PositionedStack(e.empty, 130, 16, false));
             } else {
-                in.add(new PositionedStack(fluid, 6, 4, false));
-                in.add(new PositionedStack(e.empty, 28, 4, false));
-                result = new PositionedStack(e.cell, 130, 4, false);
+                in.add(new PositionedStack(fluid, 6, 16, false));
+                in.add(new PositionedStack(e.empty, 28, 16, false));
+                result = new PositionedStack(e.cell, 130, 16, false);
             }
         }
 
@@ -164,15 +164,30 @@ public class TankRecipeHandler extends TemplateRecipeHandler {
     }
 
     @Override
-    public void drawBackground(final int recipe) {}
+    public void drawBackground(final int recipe) {
+        if (recipe < 0 || recipe >= arecipes.size()) return;
+        PlannerTabs.panel(0, 0, 166, 36);
+        PlannerTabs.headerBand(1, 1, 164, 12);
+        final CachedRecipe c = arecipes.get(recipe);
+        for (final PositionedStack s : c.getIngredients()) PlannerTabs.slot(s.relx, s.rely);
+        for (final PositionedStack s : c.getOtherStacks()) PlannerTabs.slot(s.relx, s.rely);
+        final PositionedStack r = c.getResult();
+        if (r != null) PlannerTabs.slot(r.relx, r.rely);
+    }
 
     @Override
     public void drawExtras(final int recipe) {
+        final boolean emptying = recipe >= 0 && recipe < entries.size()
+            && entries.get(recipe)
+                .emptying();
+        final String label = emptying ? "Empty cells" : "Fill cells";
+        GuiDraw.drawString(label, 4, 3, 0xFF202020, false);
+        // Beside the label, not at the band's right end: NEI's favourite button sits there.
+        GuiDraw.drawString("- free, instant", 4 + GuiDraw.fontRenderer.getStringWidth(label) + 4, 3, 0xFF505050, false);
         // An arrow between inputs and outputs.
-        final int y = 12;
-        GuiDraw.drawRect(56, y, 28, 2, 0xFF8B8B8B);
-        for (int i = 0; i < 4; i++) GuiDraw.drawRect(82 + i, y - 4 + i + 1, 1, 8 - 2 * i - 1, 0xFF8B8B8B);
-        GuiDraw.fontRenderer.drawString("Free, instant", 6, 26, 0xFF808080);
+        final int y = 23;
+        GuiDraw.drawRect(56, y, 28, 2, 0xFF6E6E6E);
+        for (int i = 0; i < 4; i++) GuiDraw.drawRect(82 + i, y - 4 + i + 1, 1, 8 - 2 * i - 1, 0xFF6E6E6E);
     }
 
     /** Tells NEI's tab strip this handler's icon and size; NEI forgets them whenever it reloads its handler list. */
@@ -181,7 +196,7 @@ public class TankRecipeHandler extends TemplateRecipeHandler {
             ID,
             com.gtnhplanner.power.game.PowerPorts.machineStack(FluidTank.ID),
             "minecraft:bucket",
-            38,
+            40,
             166,
             5);
     }

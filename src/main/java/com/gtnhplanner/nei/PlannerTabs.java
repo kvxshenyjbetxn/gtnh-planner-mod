@@ -8,6 +8,7 @@ import net.minecraft.item.ItemStack;
 import com.gtnhplanner.GtnhPlanner;
 import com.gtnhplanner.ui.BoardSession;
 
+import codechicken.lib.gui.GuiDraw;
 import codechicken.nei.recipe.GuiRecipeTab;
 import codechicken.nei.recipe.HandlerInfo;
 
@@ -44,5 +45,28 @@ final class PlannerTabs {
         } catch (final LinkageError | RuntimeException e) {
             GtnhPlanner.LOG.warn("Could not give NEI's {} tab an icon", id, e);
         }
+    }
+
+    private static final int BORDER = 0xFF8E8E8E;
+
+    /** A card: light fill with a 1 px border. */
+    static void panel(final int x, final int y, final int w, final int h) {
+        GuiDraw.drawRect(x, y, w, h, BORDER);
+        GuiDraw.drawRect(x + 1, y + 1, w - 2, h - 2, 0xFFD8D8D8);
+    }
+
+    /** A darker band along a card's top, a 1 px line under it. */
+    static void headerBand(final int x, final int y, final int w, final int h) {
+        GuiDraw.drawRect(x, y, w, h, 0xFFBCBCBC);
+        GuiDraw.drawRect(x, y + h, w, 1, BORDER);
+    }
+
+    /** A vanilla inset slot behind a 16 px item drawn at (x, y). */
+    static void slot(final int x, final int y) {
+        GuiDraw.drawRect(x - 1, y - 1, 18, 18, 0xFF8B8B8B);
+        GuiDraw.drawRect(x - 1, y - 1, 18, 1, 0xFF373737);
+        GuiDraw.drawRect(x - 1, y - 1, 1, 18, 0xFF373737);
+        GuiDraw.drawRect(x - 1, y + 16, 18, 1, 0xFFFFFFFF);
+        GuiDraw.drawRect(x + 16, y - 1, 1, 18, 0xFFFFFFFF);
     }
 }
