@@ -406,6 +406,11 @@ public final class BoardSession {
             final Node card = tank.node(recipeIndex);
             return card == null ? null : add(card, false, true);
         }
+        // NEI's Generators tab: the power card at the fuel the entry shows.
+        if (handler instanceof final com.gtnhplanner.nei.GeneratorRecipeHandler generators) {
+            final Node card = generators.node(recipeIndex);
+            return card == null ? null : add(card, false, true);
+        }
         return add(MachineChoices.newNode(handler, recipeIndex, null), false, true);
     }
 

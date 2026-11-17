@@ -5,22 +5,17 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidContainerRegistry;
 import net.minecraftforge.fluids.FluidStack;
 
 import com.gtnhplanner.Compat;
-import com.gtnhplanner.GtnhPlanner;
 import com.gtnhplanner.data.provider.gregtech.GTHooks;
 import com.gtnhplanner.power.FluidTank;
-import com.gtnhplanner.ui.BoardSession;
 import com.gtnhplanner.ui.card.CardDefaults;
 
 import codechicken.lib.gui.GuiDraw;
 import codechicken.nei.PositionedStack;
-import codechicken.nei.recipe.GuiRecipeTab;
-import codechicken.nei.recipe.HandlerInfo;
 import codechicken.nei.recipe.StackInfo;
 import codechicken.nei.recipe.TemplateRecipeHandler;
 
@@ -47,8 +42,7 @@ public class TankRecipeHandler extends TemplateRecipeHandler {
      */
     public static List<Entry> entriesFor(@Nullable final ItemStack looked, final boolean uses) {
         final List<Entry> out = new ArrayList<>();
-        final BoardSession session = BoardSession.current();
-        if (looked == null || session == null || !session.lookupArmed()) return out;
+        if (looked == null || !PlannerTabs.armed()) return out;
         final ItemStack one = looked.copy();
         one.stackSize = 1;
         if (FluidContainerRegistry.isFilledContainer(one)) {
@@ -183,22 +177,12 @@ public class TankRecipeHandler extends TemplateRecipeHandler {
 
     /** Tells NEI's tab strip this handler's icon and size; NEI forgets them whenever it reloads its handler list. */
     private static void ensureInfo() {
-        try {
-            if (GuiRecipeTab.handlerMap.containsKey(ID)) return;
-            final HandlerInfo info = new HandlerInfo(ID, "GTNH Planner", GtnhPlanner.MODID, false, null);
-            // Height, width, recipes a page.
-            info.setHandlerDimensions(38, 166, 5);
-            final ItemStack icon = com.gtnhplanner.power.game.PowerPorts.machineStack(FluidTank.ID);
-            String name = icon == null ? null : String.valueOf(Item.itemRegistry.getNameForObject(icon.getItem()));
-            int meta = icon == null ? 0 : icon.getItemDamage();
-            if (name == null || name.equals("null")) {
-                name = "minecraft:bucket";
-                meta = 0;
-            }
-            info.setItem(name + ":" + meta, "");
-            GuiRecipeTab.handlerMap.put(ID, info);
-        } catch (final LinkageError | RuntimeException e) {
-            GtnhPlanner.LOG.warn("Could not give NEI's Tank tab an icon", e);
-        }
+        PlannerTabs.ensureInfo(
+            ID,
+            com.gtnhplanner.power.game.PowerPorts.machineStack(FluidTank.ID),
+            "minecraft:bucket",
+            38,
+            166,
+            5);
     }
 }

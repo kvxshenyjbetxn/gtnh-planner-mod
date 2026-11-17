@@ -90,6 +90,9 @@ public class NEIPlanConfig implements IConfigureNEI {
         final TankRecipeHandler tank = new TankRecipeHandler();
         API.registerRecipeHandler(tank);
         API.registerUsageHandler(tank);
+        final GeneratorRecipeHandler generators = new GeneratorRecipeHandler();
+        API.registerRecipeHandler(generators);
+        API.registerUsageHandler(generators);
         API.addHashBind(ConfigUndoKey.KEY, ConfigUndoKey.defVal);
         API.addHashBind(ConfigRedoKey.KEY, ConfigRedoKey.defVal);
         API.addHashBind(ConfigRedoAltKey.KEY, ConfigRedoAltKey.defVal);

@@ -1,6 +1,6 @@
 ## New
 
-- Looking up a fluid or cell from a card now has a Tank tab to fill or empty cells for free.
+- Looking up something from a card now shows a Tank tab to fill or empty cells for free, and a Generators tab with the generators and boilers that burn or make it.
 
 ## Better
 
