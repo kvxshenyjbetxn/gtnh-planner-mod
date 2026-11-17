@@ -61,8 +61,17 @@ public final class PlanPicture {
         SIMPLE
     }
 
-    /** What the picture shows: its detail, and whether its footer gives the plan's name and what goes in and out. */
-    public record Options(Detail detail, boolean name, boolean flows) {}
+    /**
+     * What the picture shows: its detail, whether its footer gives the plan's name and what goes in and out, whether
+     * the
+     * board's paper is left out (the picture keeps its alpha), and whether the annotations are drawn.
+     */
+    public record Options(Detail detail, boolean name, boolean flows, boolean transparent, boolean annotations) {
+
+        public Options(final Detail detail, final boolean name, final boolean flows) {
+            this(detail, name, flows, false, true);
+        }
+    }
 
     /** The board's zoom for each detail: full size, and well inside the cards' glance view. */
     private static final float FULL_ZOOM = 1f, OUT_ZOOM = 0.4f;
@@ -74,13 +83,23 @@ public final class PlanPicture {
     /** The narrowest picture, in GUI units: a small plan's, and wider with a footer so its panels have room. */
     private static final int MIN_WIDTH = 240, MIN_WIDTH_FOOTER = 480;
 
-    private static boolean drawing;
+    private static boolean drawing, bare, noNotes;
 
     private PlanPicture() {}
 
     /** Whether the board is drawing into a picture now: it then draws as it is, nothing lit, moving or selected. */
     public static boolean drawing() {
         return drawing;
+    }
+
+    /** Whether the board paints its paper and dot grid: always, but in a picture asked to be transparent. */
+    public static boolean paper() {
+        return !(drawing && bare);
+    }
+
+    /** Whether the annotations draw: always, but in a picture asked to leave them out. */
+    public static boolean notes() {
+        return !(drawing && noNotes);
     }
 
     // region Taking it
@@ -144,7 +163,7 @@ public final class PlanPicture {
         Footer footer;
         while (true) {
             // The names zoomed out are as big on screen at any zoom, so they take more of the board the smaller it is.
-            b = canvas.planBounds(zoom);
+            b = canvas.planBounds(zoom, o.annotations());
             if (b == null) throw new IllegalStateException("There is nothing on the board yet");
             final float worldW = b[2] - b[0] + 2 * MARGIN, worldH = b[3] - b[1] + 2 * MARGIN;
             boardW = (int) Math.ceil(worldW * zoom);
@@ -207,11 +226,12 @@ public final class PlanPicture {
             matrices = true;
             GL11.glColorMask(true, true, true, true);
             GL11.glDepthMask(true);
+            // A transparent picture clears to nothing, in the paper's colour so soft edges blend towards it.
             GL11.glClearColor(
                 (Hyb.CANVAS >> 16 & 0xFF) / 255f,
                 (Hyb.CANVAS >> 8 & 0xFF) / 255f,
                 (Hyb.CANVAS & 0xFF) / 255f,
-                1f);
+                o.transparent() ? 0f : 1f);
             GL11.glClearDepth(1);
             GL11.glClearStencil(0);
             GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT | GL11.GL_STENCIL_BUFFER_BIT);
@@ -228,10 +248,14 @@ public final class PlanPicture {
             context.pushMatrix();
             context.resetCurrent();
             drawing = true;
+            bare = o.transparent();
+            noNotes = !o.annotations();
             try {
                 WidgetTree.drawTree(canvas, context, true, true);
             } finally {
                 drawing = false;
+                bare = false;
+                noNotes = false;
                 context.popMatrix();
             }
 
@@ -243,7 +267,7 @@ public final class PlanPicture {
             if (footer != null) footer.draw(boardH);
             else mark(width, boardH);
 
-            return read(pw, ph);
+            return read(pw, ph, o.transparent());
         } catch (final RuntimeException | Error e) {
             // A throw mid-draw can leave a tessellator batch open, which would break the game's next draw: flush it
             // into the throwaway framebuffer ("Not tesselating!" just means there was none).
@@ -253,6 +277,8 @@ public final class PlanPicture {
             throw e;
         } finally {
             drawing = false;
+            bare = false;
+            noNotes = false;
             g.setZoom(zoomBefore);
             g.setPanX(panXBefore);
             g.setPanY(panYBefore);
@@ -280,12 +306,15 @@ public final class PlanPicture {
     }
 
     /** The framebuffer as an image, top row first (GL's rows run bottom-up). */
-    private static BufferedImage read(final int pw, final int ph) {
+    private static BufferedImage read(final int pw, final int ph, final boolean alpha) {
         final ByteBuffer bytes = BufferUtils.createByteBuffer(pw * ph * 4);
         GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 4);
         GL11.glReadPixels(0, 0, pw, ph, GL12.GL_BGRA, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, bytes);
         final IntBuffer pixels = bytes.asIntBuffer();
-        final BufferedImage image = new BufferedImage(pw, ph, BufferedImage.TYPE_INT_RGB);
+        final BufferedImage image = new BufferedImage(
+            pw,
+            ph,
+            alpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
         final int[] out = ((DataBufferInt) image.getRaster()
             .getDataBuffer()).getData();
         for (int y = 0; y < ph; y++) {
@@ -513,16 +542,50 @@ public final class PlanPicture {
             BufferedImage at = image;
             while (at.getWidth() / 2 >= tw && at.getHeight() / 2 >= th)
                 at = scaled(at, at.getWidth() / 2, at.getHeight() / 2);
-            final BufferedImage small = at.getWidth() == tw && at.getHeight() == th ? at : scaled(at, tw, th);
+            final BufferedImage fitted = at.getWidth() == tw && at.getHeight() == th ? at : scaled(at, tw, th);
+            // A transparent picture shows over a chequerboard, as an editor does.
+            final BufferedImage small = fitted.getColorModel()
+                .hasAlpha() ? checkered(fitted) : fitted;
             onClient(() -> done.accept(small));
         });
     }
 
     private static BufferedImage scaled(final BufferedImage from, final int w, final int h) {
-        final BufferedImage to = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        final BufferedImage to = new BufferedImage(
+            w,
+            h,
+            from.getColorModel()
+                .hasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
         final java.awt.Graphics2D g = to.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g.drawImage(from, 0, 0, w, h, null);
+        g.dispose();
+        return to;
+    }
+
+    /** {@code image} over a light and dark chequerboard, to show what is transparent. */
+    private static BufferedImage checkered(final BufferedImage image) {
+        final int w = image.getWidth(), h = image.getHeight();
+        final BufferedImage to = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        final java.awt.Graphics2D g = to.createGraphics();
+        for (int y = 0; y < h; y += 8) for (int x = 0; x < w; x += 8) {
+            g.setColor(new java.awt.Color(((x + y) / 8 & 1) == 0 ? 0x3A3C42 : 0x2A2C31));
+            g.fillRect(x, y, 8, 8);
+        }
+        g.drawImage(image, 0, 0, null);
+        g.dispose();
+        return to;
+    }
+
+    /** {@code image} laid on {@code colour}, opaque: a clipboard and most chat boxes drop alpha as black. */
+    private static BufferedImage flattened(final BufferedImage image, final int colour) {
+        if (!image.getColorModel()
+            .hasAlpha()) return image;
+        final BufferedImage to = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+        final java.awt.Graphics2D g = to.createGraphics();
+        g.setColor(new java.awt.Color(colour));
+        g.fillRect(0, 0, to.getWidth(), to.getHeight());
+        g.drawImage(image, 0, 0, null);
         g.dispose();
         return to;
     }
@@ -547,8 +610,14 @@ public final class PlanPicture {
             try {
                 if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("could not make " + dir);
                 if (plan == null) ImageIO.write(image, "png", file);
-                else java.nio.file.Files
-                    .write(file.toPath(), com.gtnhplanner.library.PlanImage.png(image, plan, Hyb.CANVAS));
+                else java.nio.file.Files.write(
+                    file.toPath(),
+                    com.gtnhplanner.library.PlanImage.png(
+                        image,
+                        plan,
+                        // Letterboxing beside a shrunk transparent picture stays transparent.
+                        image.getColorModel()
+                            .hasAlpha() ? 0 : Hyb.CANVAS));
                 onClient(() -> done.accept(file));
             } catch (final IOException | RuntimeException e) {
                 GtnhPlanner.LOG.warn("Could not save the picture of the plan", e);
@@ -565,12 +634,13 @@ public final class PlanPicture {
         final Consumer<String> failed) {
         FILES.execute(() -> {
             try {
+                // The clipboard carries no alpha: a transparent picture goes on the paper's colour.
+                final BufferedImage flat = flattened(image, Hyb.CANVAS);
                 Toolkit.getDefaultToolkit()
                     .getSystemClipboard()
                     .setContents(
                         new Picture(
-                            plan == null ? image
-                                : com.gtnhplanner.library.PlanImage.withStrip(image, plan, Hyb.CANVAS)),
+                            plan == null ? flat : com.gtnhplanner.library.PlanImage.withStrip(flat, plan, Hyb.CANVAS)),
                         null);
                 onClient(done);
             } catch (final RuntimeException | Error e) {

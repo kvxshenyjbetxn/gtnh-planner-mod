@@ -49,7 +49,12 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
     private static final String[] DETAILS = { "Detailed", "Simple" };
 
     /** What was chosen last, kept while the game runs. */
-    private static PlanPicture.Options chosen = new PlanPicture.Options(PlanPicture.Detail.DETAILED, false, false);
+    private static PlanPicture.Options chosen = new PlanPicture.Options(
+        PlanPicture.Detail.DETAILED,
+        false,
+        false,
+        false,
+        true);
 
     /** The preview: one texture, kept between openings and replaced as pictures come in. */
     private static final ResourceLocation PREVIEW = new ResourceLocation(GtnhPlanner.MODID, "plan_picture_preview");
@@ -271,10 +276,14 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
         }
         drawSwitch(1, "Plan name", o.name(), mx, my);
         drawSwitch(2, "Inputs and outputs", o.flows(), mx, my);
+        drawSwitch(3, "Transparent background", o.transparent(), mx, my);
+        drawSwitch(4, "Show annotations", o.annotations(), mx, my);
+        if (!o.annotations())
+            Hyb.text(Hyb.fit("The embedded plan includes annotations.", right - col), col, rowY(5) - 4, Hyb.MUTED);
 
         // How big it comes out, and what Save or Copy did.
-        final int infoY = rowY(3) + 6;
-        Hyb.rect(col, rowY(3), right - col, 1, CardPaint.HAIR);
+        final int infoY = rowY(5) + 12;
+        Hyb.rect(col, rowY(5) + 6, right - col, 1, CardPaint.HAIR);
         if (picture != null && taking == null)
             Hyb.text(String.format("%,d x %,d pixels", picture.getWidth(), picture.getHeight()), col, infoY, Hyb.MUTED);
         if (status != null)
@@ -358,20 +367,31 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
         } else if (in(copyRect(), mx, my) && ready()) {
             Hyb.click();
             copy();
-        } else if (mx >= col && mx < right && my >= rowY(0) && my < rowY(3)) {
+        } else if (mx >= col && mx < right && my >= rowY(0) && my < rowY(5)) {
             final int row = (my - rowY(0)) / ROW;
             if (row == 0) {
                 for (int i = 0; i < DETAILS.length; i++) if (in(detailRect(i), mx, my) && i != o.detail()
                     .ordinal()) {
-                        chosen = new PlanPicture.Options(PlanPicture.Detail.values()[i], o.name(), o.flows());
+                        chosen = new PlanPicture.Options(
+                            PlanPicture.Detail.values()[i],
+                            o.name(),
+                            o.flows(),
+                            o.transparent(),
+                            o.annotations());
                         Sfx.TICK.play(i > 0 ? 1.12f : 0.9f);
                     }
             } else if (row == 1) {
-                chosen = new PlanPicture.Options(o.detail(), !o.name(), o.flows());
+                chosen = new PlanPicture.Options(o.detail(), !o.name(), o.flows(), o.transparent(), o.annotations());
                 (chosen.name() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
-            } else {
-                chosen = new PlanPicture.Options(o.detail(), o.name(), !o.flows());
+            } else if (row == 2) {
+                chosen = new PlanPicture.Options(o.detail(), o.name(), !o.flows(), o.transparent(), o.annotations());
                 (chosen.flows() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
+            } else if (row == 3) {
+                chosen = new PlanPicture.Options(o.detail(), o.name(), o.flows(), !o.transparent(), o.annotations());
+                (chosen.transparent() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
+            } else {
+                chosen = new PlanPicture.Options(o.detail(), o.name(), o.flows(), o.transparent(), !o.annotations());
+                (chosen.annotations() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
             }
             status = null;
         }

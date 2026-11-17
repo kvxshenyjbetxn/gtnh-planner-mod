@@ -267,7 +267,7 @@ public final class NoteCard extends Widget<NoteCard> implements Interactable, ID
     @Override
     public void draw(final ModularGuiContext context, final WidgetThemeEntry<?> widgetTheme) {
         final Note n = note();
-        if (n == null) return;
+        if (n == null || !com.gtnhplanner.ui.canvas.PlanPicture.notes()) return;
         if (n.isDrawing()) {
             drawDrawing(n);
             return;

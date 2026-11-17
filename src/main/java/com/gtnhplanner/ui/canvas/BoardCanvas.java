@@ -415,6 +415,7 @@ public final class BoardCanvas extends ParentWidget<BoardCanvas>
     private void drawCanvas(final ModularGuiContext context, final WidgetThemeEntry<?> widgetTheme) {
         if (PlanPicture.drawing()) {
             // A picture of the plan: the board as it is, solid whatever the see-through, nothing moving or lit.
+            if (!PlanPicture.paper()) return;
             final Area a = getArea();
             Hyb.rect(0, 0, a.width, a.height, Hyb.CANVAS);
             drawDots(a, Hyb.CANVAS_DOT);
@@ -632,15 +633,15 @@ public final class BoardCanvas extends ParentWidget<BoardCanvas>
     /**
      * Where the plan is on the board at {@code zoom}, in board units {min x, min y, max x, max y}: its cards, drawers
      * and notes as they stand, its wires as last routed, and room for the names the zoomed-out board puts beside them;
-     * null when the board is empty.
+     * null when the board is empty. Without {@code withNotes} the annotations are left out of it.
      */
     @javax.annotation.Nullable
-    float[] planBounds(final float zoom) {
+    float[] planBounds(final float zoom, final boolean withNotes) {
         final float[] b = { Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE };
         final List<com.cleanroommc.modularui.api.widget.IWidget> items = new ArrayList<>(
             new java.util.LinkedHashSet<>(cards.values()));
         items.addAll(drawers.values());
-        items.addAll(notes.values());
+        if (withNotes) items.addAll(notes.values());
         for (final com.cleanroommc.modularui.api.widget.IWidget w : items) {
             final Area a = w.getArea();
             grow(b, a.rx, a.ry);

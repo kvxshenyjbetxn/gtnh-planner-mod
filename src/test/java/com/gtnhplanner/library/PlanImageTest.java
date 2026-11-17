@@ -66,6 +66,23 @@ class PlanImageTest {
     }
 
     @Test
+    void aTransparentPictureKeepsItsAlphaAndItsPlan() throws IOException {
+        final BufferedImage clear = new BufferedImage(80, 40, BufferedImage.TYPE_INT_ARGB);
+        clear.setRGB(10, 10, 0xFF336699);
+        clear.setRGB(11, 10, 0x80336699);
+        final byte[] png = PlanImage.png(clear, PLAN, 0);
+        assertEquals(PLAN, PlanImage.chunkText(png));
+        assertEquals(PLAN, PlanImage.pixels(png), "the strip reads back whatever is behind the picture");
+        final BufferedImage shown = ImageIO.read(new ByteArrayInputStream(png));
+        assertEquals(0, shown.getRGB(0, 0) >>> 24, "the empty background stays transparent");
+        assertEquals(0xFF336699, shown.getRGB(10, 10));
+        assertEquals(0x80, shown.getRGB(11, 10) >>> 24);
+        // A tall empty picture still reads back.
+        final BufferedImage tall = new BufferedImage(40, 4090, BufferedImage.TYPE_INT_ARGB);
+        assertEquals(PLAN, PlanImage.pixels(PlanImage.png(tall, PLAN, 0)));
+    }
+
+    @Test
     void theChunkIsTheWebsitesTextChunkJustBeforeTheEnd() throws IOException {
         final byte[] png = PlanImage.png(picture(16, 16), PLAN, 0xFF141414);
         // The last chunk is IEND; the one before it the plan's tEXt.
