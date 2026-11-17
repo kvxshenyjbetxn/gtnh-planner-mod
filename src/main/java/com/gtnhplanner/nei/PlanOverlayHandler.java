@@ -35,13 +35,13 @@ public class PlanOverlayHandler implements IOverlayHandler {
 
     @Override
     public boolean canCraft(final GuiContainer firstGui, final IRecipeHandler handler, final int recipeIndex) {
-        return plannable(handler, recipeIndex);
+        return handler instanceof TankRecipeHandler || plannable(handler, recipeIndex);
     }
 
     @Override
     public boolean craft(final GuiContainer firstGui, final IRecipeHandler handler, final int recipeIndex,
         final int multiplier) {
-        return plannable(handler, recipeIndex);
+        return handler instanceof TankRecipeHandler || plannable(handler, recipeIndex);
     }
 
     /** Whether the planner can read the recipe: + and the plan button only show on recipes it can. */
@@ -60,6 +60,11 @@ public class PlanOverlayHandler implements IOverlayHandler {
         if (Planner.screenOf(firstGui) instanceof final BoardScreen board) {
             board.session()
                 .addRecipe(handler, recipeIndex);
+            return;
+        }
+        if (handler instanceof final TankRecipeHandler tank) {
+            final com.gtnhplanner.data.flowchart.Node card = tank.node(recipeIndex);
+            if (card != null) NewCards.addTo(Plan.getActiveGraph(), card);
             return;
         }
         NewCards.addTo(Plan.getActiveGraph(), MachineChoices.newNode(handler, recipeIndex, null));

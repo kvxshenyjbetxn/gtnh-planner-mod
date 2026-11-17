@@ -148,6 +148,19 @@ public final class FluidTank {
         return true;
     }
 
+    /**
+     * A new tank card holding a filled container in a mode, its ports built; null when the key is no container this
+     * game knows.
+     */
+    @Nullable
+    public static Node make(final boolean emptying, final String cellKey) {
+        if (pair(cellKey) == null) return null;
+        final Map<String, String> settings = fresh();
+        settings.put(MODE, emptying ? EMPTY : FILL);
+        settings.put(CELL, cellKey);
+        return Node.power(ID, settings, 0, 0);
+    }
+
     /** Lets go of its pair, keeping its mode; the caller rebuilds the ports. */
     public static void release(final Node node) {
         node.powerSettings.remove(CELL);

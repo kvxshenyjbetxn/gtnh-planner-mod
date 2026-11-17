@@ -75,7 +75,7 @@ public final class BoardSession {
     private Set<UUID> noteIds = Set.of();
     /** The top bar's unit keys, as the player last left them ({@link PlannerSettings}). */
     private Fmt.RateUnit rateUnit = PlannerSettings.rateUnit();
-    private NodeLookupContext pendingLookup;
+    private volatile NodeLookupContext pendingLookup;
     private SolveService solver = new SolveService();
     /** Set when the board closed; NEI's pages close it too, and closing back to it reopens it. */
     private boolean closed;
@@ -356,6 +356,11 @@ public final class BoardSession {
         pendingLookup = new NodeLookupContext(nodeId, output, portIndex);
     }
 
+    /** Whether a port's lookup is armed: NEI's Tank tab shows only then. */
+    public boolean lookupArmed() {
+        return pendingLookup != null;
+    }
+
     /** Forgets an armed lookup, when the page it was for never opened. */
     public void disarmLookup() {
         pendingLookup = null;
@@ -396,6 +401,11 @@ public final class BoardSession {
      * wires to.
      */
     public Node addRecipe(final IRecipeHandler handler, final int recipeIndex) {
+        // NEI's Tank tab: the fluid tank card in that recipe's mode and cell, placed and wired like any other.
+        if (handler instanceof final com.gtnhplanner.nei.TankRecipeHandler tank) {
+            final Node card = tank.node(recipeIndex);
+            return card == null ? null : add(card, false, true);
+        }
         return add(MachineChoices.newNode(handler, recipeIndex, null), false, true);
     }
 

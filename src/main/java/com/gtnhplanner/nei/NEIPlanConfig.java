@@ -86,6 +86,10 @@ public class NEIPlanConfig implements IConfigureNEI {
                 }
             }
         });
+        // The Tank tab: empty until the planner arms a lookup from a card's port.
+        final TankRecipeHandler tank = new TankRecipeHandler();
+        API.registerRecipeHandler(tank);
+        API.registerUsageHandler(tank);
         API.addHashBind(ConfigUndoKey.KEY, ConfigUndoKey.defVal);
         API.addHashBind(ConfigRedoKey.KEY, ConfigRedoKey.defVal);
         API.addHashBind(ConfigRedoAltKey.KEY, ConfigRedoAltKey.defVal);

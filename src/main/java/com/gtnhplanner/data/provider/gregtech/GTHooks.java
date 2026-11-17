@@ -21,6 +21,11 @@ public final class GTHooks {
         return GTUtility.getFluidDisplayStack(fluidStack, false);
     }
 
+    /** GT's fluid display item showing its litres, as GT's own NEI pages draw them. */
+    public static ItemStack fluidDisplayStackWithAmount(final FluidStack fluidStack) {
+        return GTUtility.getFluidDisplayStack(fluidStack, true);
+    }
+
     /**
      * GT material color for MetaGeneratedItems (their renderer applies it, so the item icon API
      * lies about their color); white when the stack has none.
