@@ -7,6 +7,7 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -36,36 +37,17 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
 
     public static final String ID = "gtnhplanner.generators";
 
-    private static final int WIDTH = 166, HEIGHT = 56, PER_PAGE = 3;
-    private static final int ROWS = 2;
-    private static final int[] ROW_Y = { 16, 34 };
-    private static final int LEFT_SLOT = 4, LEFT_TEXT = 24, ARROW_W = 9, RIGHT_LIMIT = WIDTH - 13;
-    /** The right text keeps at least this much room, so the left text room is capped. */
-    private static final int MIN_RIGHT_TEXT = 44;
+    private static final int WIDTH = 166, ROW = 18, BAND = 12, BAND2 = 22, GAP = 4, DIVIDER = 5, TEXT_X = 24,
+        TEXT_END = 150, SLOT_X = 4;
+    private static final int PER_PAGE = 3;
+    /** The smallest entry (no input, one output) is what NEI's tab strip is told; taller entries say so themselves. */
+    private static final int HEIGHT = cardHeight(BAND, 0, 1) + GAP;
 
-    /** Where an entry's columns sit, from its own text widths. */
-    private record Layout(int leftRoom, int arrowX, int rightSlotX, int rightTextX) {}
-
-    private static Layout layout(final net.minecraft.client.gui.FontRenderer font, final Entry e) {
-        final int fixed = LEFT_TEXT + 1 + ARROW_W + 1 + 17 + 2;
-        final int cap = Math.max(0, RIGHT_LIMIT - MIN_RIGHT_TEXT - fixed);
-        int room = 0;
-        for (int i = 0; i < ROWS && i < e.inputs()
-            .size(); i++) {
-            final int extra = e.inputs()
-                .size() - ROWS;
-            final String tail = i == ROWS - 1 && extra > 0 ? " +" + extra : "";
-            room = Math.max(
-                room,
-                font.getStringWidth(
-                    e.inputs()
-                        .get(i)
-                        .rate() + tail));
-        }
-        room = Math.min(room, cap);
-        final int arrowX = LEFT_TEXT + room + 1;
-        final int slotX = arrowX + ARROW_W + 1;
-        return new Layout(room, arrowX, slotX, slotX + 17 + 2);
+    /** A card's height (without the gap below): band, rows, divider, bottom padding, and room for NEI's two buttons. */
+    private static int cardHeight(final int band, final int ins, final int outs) {
+        final int rows = band + 5 + ROW * (ins + outs) + (ins > 0 ? DIVIDER : 0) + 3;
+        // NEI's heart sits 27 px above the widget's foot (card + gap); keep its top below the band.
+        return Math.max(rows, band + 30);
     }
 
     /** One flow of an entry: what it is as NEI shows it (null for EU) and its rate as text. */
@@ -155,34 +137,26 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
             outs);
     }
 
-    /** A rate to three significant figures with k, M, G (34.7, 2.05k, 24.6k), so it fits beside its slot. */
-    static String brief(final double value) {
-        final String[] units = { "", "k", "M", "G", "T" };
-        double v = Math.abs(value);
-        int u = 0;
-        while (v >= 999.5 && u < units.length - 1) {
-            v /= 1000;
-            u++;
-        }
-        final String digits = v >= 99.95 ? String.format(Locale.ROOT, "%.0f", v)
-            : v >= 9.995 ? String.format(Locale.ROOT, "%.1f", v) : String.format(Locale.ROOT, "%.2f", v);
-        final String trimmed = digits.contains(".") ? digits.replaceAll("\\.?0+$", "") : digits;
-        return (value < 0 ? "-" : "") + trimmed + units[u];
+    /** A rate: whole and grouped from 100 up ("2,048"), below that up to two decimals ("34.74", "32"). */
+    static String rate(final double value) {
+        if (Math.abs(value) >= 100) return String.format(Locale.US, "%,d", Math.round(value));
+        final String digits = String.format(Locale.US, "%.2f", value);
+        return digits.contains(".") ? digits.replaceAll("\\.?0+$", "") : digits;
     }
 
     @Nullable
     private static Flow flow(final Port<?> port) {
         final double perSecond = port.amount();
         final Object value = port.getValue();
-        if (value instanceof Energy) return new Flow(null, brief(perSecond / 20) + " EU/t");
+        if (value instanceof Energy) return new Flow(null, rate(perSecond / 20) + " EU/t");
         if (value instanceof final FluidStack fluid) {
             final ItemStack shown = com.gtnhplanner.Compat.GREGTECH.isLoaded ? GTHooks.fluidDisplayStack(fluid) : null;
-            return shown == null ? null : new Flow(shown, brief(perSecond) + " L/s");
+            return shown == null ? null : new Flow(shown, rate(perSecond) + " L/s");
         }
         if (value instanceof final ItemStack item) {
             final ItemStack shown = item.copy();
             shown.stackSize = 1;
-            return new Flow(shown, brief(perSecond) + "/s");
+            return new Flow(shown, rate(perSecond) + "/s");
         }
         return null;
     }
@@ -199,21 +173,46 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
 
         private final List<PositionedStack> in = new ArrayList<>(), more = new ArrayList<>();
 
-        private final Layout layout;
+        private final int chip;
+        private final List<String> nameLines;
+        private final int band, height;
 
         Cached(final Entry e) {
-            layout = layout(GuiDraw.fontRenderer, e);
-            for (int i = 0; i < ROWS && i < e.inputs()
-                .size(); i++) {
-                final Flow f = e.inputs()
-                    .get(i);
-                if (f.stack() != null) in.add(new PositionedStack(f.stack(), LEFT_SLOT, ROW_Y[i], false));
+            final FontRenderer font = GuiDraw.fontRenderer;
+            chip = e.tier()
+                .isEmpty() ? 0 : font.getStringWidth(e.tier()) + 4;
+            final int room = WIDTH - 3 - chip - 4 - 4;
+            final List<String> lines = new ArrayList<>();
+            final List<?> wrapped = font.listFormattedStringToWidth(e.name(), Math.max(1, room));
+            if (wrapped.size() <= 1) {
+                lines.add(e.name());
+            } else {
+                lines.add(String.valueOf(wrapped.get(0)));
+                final StringBuilder rest = new StringBuilder();
+                for (int i = 1; i < wrapped.size(); i++) {
+                    if (i > 1) rest.append(' ');
+                    rest.append(wrapped.get(i));
+                }
+                lines.add(fit(font, rest.toString(), room));
             }
-            for (int i = 0; i < ROWS && i < e.outputs()
-                .size(); i++) {
-                final Flow f = e.outputs()
-                    .get(i);
-                if (f.stack() != null) more.add(new PositionedStack(f.stack(), layout.rightSlotX(), ROW_Y[i], false));
+            nameLines = lines;
+            band = lines.size() > 1 ? BAND2 : BAND;
+            height = cardHeight(
+                band,
+                e.inputs()
+                    .size(),
+                e.outputs()
+                    .size());
+            int y = firstRow(band);
+            for (final Flow f : e.inputs()) {
+                if (f.stack() != null) in.add(new PositionedStack(f.stack(), SLOT_X, y + 1, false));
+                y += ROW;
+            }
+            if (!e.inputs()
+                .isEmpty()) y += DIVIDER;
+            for (final Flow f : e.outputs()) {
+                if (f.stack() != null) more.add(new PositionedStack(f.stack(), SLOT_X, y + 1, false));
+                y += ROW;
             }
         }
 
@@ -231,6 +230,11 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
         public List<PositionedStack> getOtherStacks() {
             return more;
         }
+    }
+
+    /** Where the first flow row starts: the band, its line, 3 px of air. */
+    private static int firstRow(final int band) {
+        return band + 5;
     }
 
     private void load(final ItemStack stack, final boolean uses) {
@@ -271,68 +275,81 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
         return ID;
     }
 
+    /** A plain method, not an override: NEI before per-recipe heights uses the tab's height. */
+    public int getRecipeHeight(final int recipe) {
+        if (recipe < 0 || recipe >= arecipes.size()) return HEIGHT;
+        return ((Cached) arecipes.get(recipe)).height + GAP;
+    }
+
     @Override
     public void drawBackground(final int recipe) {
         if (recipe < 0 || recipe >= arecipes.size()) return;
-        PlannerTabs.panel(0, 0, WIDTH, 52);
-        PlannerTabs.headerBand(1, 1, WIDTH - 2, 12);
-        final CachedRecipe c = arecipes.get(recipe);
+        final Cached c = (Cached) arecipes.get(recipe);
+        PlannerTabs.panel(0, 0, WIDTH, c.height);
+        PlannerTabs.headerBand(1, 1, WIDTH - 2, c.band);
         for (final PositionedStack s : c.getIngredients()) PlannerTabs.slot(s.relx, s.rely);
         for (final PositionedStack s : c.getOtherStacks()) PlannerTabs.slot(s.relx, s.rely);
     }
 
-    private static String fit(final net.minecraft.client.gui.FontRenderer font, final String text, final int room) {
+    private static String fit(final FontRenderer font, final String text, final int room) {
         if (font.getStringWidth(text) <= room) return text;
         return font.trimStringToWidth(text, Math.max(0, room - font.getStringWidth("..."))) + "...";
     }
 
-    /**
-     * One side's rows: the slot is drawn by NEI, the rate beside it; EU has no slot, so its text takes the slot's
-     * place.
-     */
-    private static void drawSide(final net.minecraft.client.gui.FontRenderer font, final List<Flow> flows,
-        final int slotX, final int textX, final int right) {
-        for (int i = 0; i < ROWS && i < flows.size(); i++) {
-            final Flow f = flows.get(i);
-            String text = f.rate();
-            if (text.isEmpty()) continue;
-            final int extra = flows.size() - ROWS;
-            final int x = f.stack() == null ? slotX : textX;
-            final String tail = i == ROWS - 1 && extra > 0 ? " +" + extra : "";
-            text = fit(font, text, right - x - font.getStringWidth(tail)) + tail;
-            GuiDraw.drawString(
-                text,
-                x,
-                ROW_Y[i] + 4,
-                f.rate()
-                    .endsWith(" EU/t") ? 0xFF7A5200 : 0xFF303030,
-                false);
+    /** One flow's line: its rate, then the resource's name quieter beside it. */
+    private static void drawRow(final FontRenderer font, final Flow f, final int rowY, final int heartTop) {
+        final String rate = f.rate();
+        if (rate.isEmpty()) return;
+        final int y = rowY + (ROW - 8) / 2;
+        // A line above NEI's buttons may run to the card's edge; one beside them stops short.
+        final int end = y + 8 <= heartTop ? WIDTH - 4 : TEXT_END;
+        final boolean eu = rate.endsWith(" EU/t");
+        GuiDraw.drawString(rate, TEXT_X, y, eu ? 0xFF7A5200 : 0xFF303030, false);
+        String name = "";
+        // An EU row's rate already says EU, and its slot shows the machine, not a resource.
+        if (!eu && f.stack() != null) {
+            try {
+                name = f.stack()
+                    .getDisplayName();
+            } catch (final RuntimeException ex) {
+                name = "";
+            }
         }
+        final int x = TEXT_X + font.getStringWidth(rate) + 4;
+        if (name == null || name.isEmpty() || x >= end) return;
+        GuiDraw.drawString(fit(font, name, end - x), x, y, 0xFF707070, false);
     }
 
     @Override
     public void drawExtras(final int recipe) {
         if (recipe < 0 || recipe >= entries.size()) return;
         final Entry e = entries.get(recipe);
-        final net.minecraft.client.gui.FontRenderer font = GuiDraw.fontRenderer;
-        // Name on the left, the tier as a small chip at the right; the name shortens to leave room for it.
-        int chip = 0;
-        if (!e.tier()
-            .isEmpty()) {
+        final Cached c = (Cached) arecipes.get(recipe);
+        final FontRenderer font = GuiDraw.fontRenderer;
+        if (c.chip > 0) {
             final Hyb.Tier t = Hyb.tier(e.tier());
-            chip = font.getStringWidth(e.tier()) + 4;
-            GuiDraw.drawRect(WIDTH - 3 - chip, 2, chip, 10, 0xFF000000 | t.bg());
-            GuiDraw.drawString(e.tier(), WIDTH - 3 - chip + 2, 3, 0xFF000000 | t.text(), false);
+            GuiDraw.drawRect(WIDTH - 3 - c.chip, 2, c.chip, 10, 0xFF000000 | t.bg());
+            GuiDraw.drawString(e.tier(), WIDTH - 3 - c.chip + 2, 3, 0xFF000000 | t.text(), false);
         }
-        GuiDraw.drawString(fit(font, e.name(), WIDTH - 3 - 4 - (chip == 0 ? 0 : chip + 4)), 4, 3, 0xFF202020, false);
-        // An arrow between inputs and outputs, level with the middle of the rows.
-        final Layout l = ((Cached) arecipes.get(recipe)).layout;
-        final int y = (ROW_Y[0] + ROW_Y[ROWS - 1] + 16) / 2;
-        GuiDraw.drawRect(l.arrowX(), y - 1, 5, 2, 0xFF6E6E6E);
-        for (int i = 0; i < 4; i++) GuiDraw.drawRect(l.arrowX() + 5 + i, y - 4 + i, 1, 8 - 2 * i, 0xFF6E6E6E);
-        drawSide(font, e.inputs(), LEFT_SLOT, LEFT_TEXT, LEFT_TEXT + l.leftRoom());
-        // Stop short of NEI's column of buttons at the right edge.
-        drawSide(font, e.outputs(), l.rightSlotX(), l.rightTextX(), RIGHT_LIMIT);
+        for (int i = 0; i < c.nameLines.size(); i++) {
+            GuiDraw.drawString(c.nameLines.get(i), 4, 3 + 10 * i, 0xFF202020, false);
+        }
+        final int heartTop = getRecipeHeight(recipe) - 27;
+        int y = firstRow(c.band);
+        for (final Flow f : e.inputs()) {
+            drawRow(font, f, y, heartTop);
+            y += ROW;
+        }
+        if (!e.inputs()
+            .isEmpty()) {
+            GuiDraw.drawRect(SLOT_X, y + 2, TEXT_END - SLOT_X, 1, 0xFFB0B0B0);
+            for (int i = 0; i < 4; i++) GuiDraw.drawRect(9 + i, y + 1 + i, 7 - 2 * i, 1, 0xFF6E6E6E);
+            y += DIVIDER;
+        }
+        for (final Flow f : e.outputs()) {
+            drawRow(font, f, y, heartTop);
+            y += ROW;
+        }
     }
 
     /** Tells NEI's tab strip this handler's icon and size; the Combustion Generator, else a redstone dust. */
