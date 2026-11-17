@@ -166,8 +166,9 @@ public class TankRecipeHandler extends TemplateRecipeHandler {
     @Override
     public void drawBackground(final int recipe) {
         if (recipe < 0 || recipe >= arecipes.size()) return;
-        PlannerTabs.panel(0, 0, 166, 36);
-        PlannerTabs.headerBand(1, 1, 164, 12);
+        // 2 px wider than the widget, so NEI's buttons (to x 166) sit inside the card's border.
+        PlannerTabs.panel(0, 0, 168, 36);
+        PlannerTabs.headerBand(1, 1, 166, 12);
         final CachedRecipe c = arecipes.get(recipe);
         for (final PositionedStack s : c.getIngredients()) PlannerTabs.slot(s.relx, s.rely);
         for (final PositionedStack s : c.getOtherStacks()) PlannerTabs.slot(s.relx, s.rely);

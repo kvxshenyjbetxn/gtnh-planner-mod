@@ -285,8 +285,9 @@ public class GeneratorRecipeHandler extends TemplateRecipeHandler {
     public void drawBackground(final int recipe) {
         if (recipe < 0 || recipe >= arecipes.size()) return;
         final Cached c = (Cached) arecipes.get(recipe);
-        PlannerTabs.panel(0, 0, WIDTH, c.height);
-        PlannerTabs.headerBand(1, 1, WIDTH - 2, c.band);
+        // 2 px wider than the widget, so NEI's buttons (to x 166) sit inside the card's border.
+        PlannerTabs.panel(0, 0, WIDTH + 2, c.height);
+        PlannerTabs.headerBand(1, 1, WIDTH, c.band);
         for (final PositionedStack s : c.getIngredients()) PlannerTabs.slot(s.relx, s.rely);
         for (final PositionedStack s : c.getOtherStacks()) PlannerTabs.slot(s.relx, s.rely);
     }

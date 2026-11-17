@@ -33,12 +33,24 @@ final class PlannerTabs {
         return session != null && session.lookupArmed();
     }
 
+    /** Where the planner's tabs sort among NEI's, in this order. */
+    private static final int LAST_TAB = 1_000_000;
+
+    private static final java.util.List<String> ORDER = java.util.List
+        .of(TankRecipeHandler.ID, GeneratorRecipeHandler.ID);
+
     /**
      * Tells NEI's tab strip a handler's icon and size; NEI forgets them whenever it reloads its handler list, so
      * handlers call this each time they load. {@code icon} may be null (then {@code fallback}, an item registry name).
      */
     static void ensureInfo(final String id, @Nullable final ItemStack icon, final String fallback, final int height,
         final int width, final int perPage) {
+        try {
+            // After every other tab (NEI sorts by this, smallest first); a player's handlerordering.csv still wins.
+            codechicken.nei.NEIClientConfig.handlerOrdering.putIfAbsent(id, LAST_TAB + ORDER.indexOf(id));
+        } catch (final LinkageError | RuntimeException e) {
+            GtnhPlanner.LOG.warn("Could not put NEI's {} tab last", id, e);
+        }
         try {
             if (GuiRecipeTab.handlerMap.containsKey(id)) return;
             final HandlerInfo info = new HandlerInfo(id, "GTNH Planner", GtnhPlanner.MODID, false, null);
