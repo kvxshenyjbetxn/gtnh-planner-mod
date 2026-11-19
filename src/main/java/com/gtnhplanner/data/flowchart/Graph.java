@@ -77,6 +77,15 @@ public class Graph {
     @Setter
     private transient long editedAt;
 
+    /**
+     * What My plans sorts and filters by ({@link PlanStats}), set each time the plan solves and saved with the slot;
+     * null for a plan not solved since this was kept. Local only.
+     */
+    @Getter
+    @Setter
+    @Nullable
+    private transient PlanStats stats;
+
     /** When the plan was last edited; a plan never edited counts from when it was last open. */
     public long lastEdited() {
         return editedAt > 0 ? editedAt : lastOpen;
@@ -298,6 +307,7 @@ public class Graph {
         this.panY = old.panY;
         this.snapToGrid = old.snapToGrid;
         this.lastOpen = old.lastOpen;
+        this.stats = old.stats;
         this.createdAt = old.createdAt;
         this.open = old.open;
         this.postId = old.postId;
@@ -311,6 +321,7 @@ public class Graph {
     void takeSlotOf(final Graph replaced) {
         this.slot = replaced.slot;
         this.lastOpen = replaced.lastOpen;
+        this.stats = replaced.stats;
         this.createdAt = replaced.createdAt;
         this.open = replaced.open;
         this.postId = replaced.postId;
