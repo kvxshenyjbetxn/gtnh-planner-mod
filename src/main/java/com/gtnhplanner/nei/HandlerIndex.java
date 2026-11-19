@@ -42,10 +42,20 @@ public final class HandlerIndex {
         }
     }
 
+    /** The id's handler name; null on NEI before GTNH 2.9 beta-3, whose ids have none, so the name check is skipped. */
+    @Nullable
+    private static String handlerNameOf(final Recipe.RecipeId id) {
+        try {
+            return id.getHandlerName();
+        } catch (final LinkageError e) {
+            return null;
+        }
+    }
+
     @Nullable
     public RecipeHandlerRef find(final Recipe.RecipeId id) {
         if (handlerName != null) {
-            final String idName = id.getHandlerName();
+            final String idName = handlerNameOf(id);
             if (idName != null && !handlerName.equals(idName)) return null;
         }
         try {

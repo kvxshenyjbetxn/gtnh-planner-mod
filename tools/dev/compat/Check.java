@@ -151,7 +151,7 @@ public class Check {
 
     static boolean jdk(String owner) {
         return owner.startsWith("java/") || owner.startsWith("javax/") || owner.startsWith("sun/") || owner.startsWith("jdk/")
-            || owner.startsWith("com/sun/");
+            || owner.startsWith("com/sun/") || owner.startsWith("org/w3c/") || owner.startsWith("org/xml/");
     }
 
     void miss(String what) {
