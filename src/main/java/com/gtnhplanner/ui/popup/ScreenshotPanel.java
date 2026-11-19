@@ -47,6 +47,11 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
         CONTROL_PICKED = 0xFF4A4D55, TRACK = 0xFF3A3C42, SWITCH_ON = 0xFF3E8F72, CYAN = 0xFF22D3EE;
 
     private static final String[] DETAILS = { "Detailed", "Simple" };
+    private static final String[] FORMATS = { "PNG", "GIF" };
+    /** The rows of choices: what each is, in the order they stand (a GIF has no transparent background). */
+    private static final int FORMAT = 0, CARDS = 1, NAME = 2, FLOWS = 3, TRANSPARENT = 4, NOTES = 5;
+    private static final int[] PNG_ROWS = { FORMAT, CARDS, NAME, FLOWS, TRANSPARENT, NOTES },
+        GIF_ROWS = { FORMAT, CARDS, NAME, FLOWS, NOTES };
 
     /** What was chosen last, kept while the game runs. */
     private static PlanPicture.Options chosen = new PlanPicture.Options(
@@ -54,7 +59,8 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
         false,
         false,
         false,
-        true);
+        true,
+        false);
 
     /** The preview: one texture, kept between openings and replaced as pictures come in. */
     private static final ResourceLocation PREVIEW = new ResourceLocation(GtnhPlanner.MODID, "plan_picture_preview");
@@ -150,6 +156,10 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
 
     private void save() {
         if (!ready()) return;
+        if (chosen.gif()) {
+            saveGif();
+            return;
+        }
         keeping = true;
         status = null;
         PlanPicture.save(
@@ -169,8 +179,33 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
             });
     }
 
+    private void saveGif() {
+        if (!ready()) return;
+        keeping = true;
+        said("Frame 0 of " + com.gtnhplanner.ui.canvas.GifPicture.FRAMES, true);
+        PlanPicture.saveGif(
+            canvas,
+            chosen,
+            session.graph()
+                .getName(),
+            (frame, of) -> said("Frame " + frame + " of " + of, true),
+            file -> {
+                keeping = false;
+                said("Saved as " + file.getName(), true);
+                session.flash(Severity.INFO, "Saved the GIF in screenshots: " + file.getName());
+            },
+            why -> {
+                keeping = false;
+                said("Couldn't save it: " + why, false);
+            });
+    }
+
     private void copy() {
         if (!ready()) return;
+        if (chosen.gif()) {
+            said("A GIF can't be copied. Save it instead.", false);
+            return;
+        }
         keeping = true;
         status = null;
         PlanPicture.copy(picture, session.pictureJson(), () -> {
@@ -207,13 +242,23 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
         return Hyb.width(name) + 12;
     }
 
-    /** One of the detail's choices. */
-    private int[] detailRect(final int i) {
+    /** One of a row's choices (its {@code names}), the row {@code row} places down. */
+    private int[] choiceRect(final String[] names, final int row, final int i) {
         int w = 1;
-        for (final String n : DETAILS) w += choiceWidth(n) + 1;
+        for (final String n : names) w += choiceWidth(n) + 1;
         int x = right - w + 1;
-        for (int k = 0; k < i; k++) x += choiceWidth(DETAILS[k]) + 1;
-        return new int[] { x, rowY(0) + (ROW - CHOICE_H) / 2 + 1, choiceWidth(DETAILS[i]), CHOICE_H - 2 };
+        for (int k = 0; k < i; k++) x += choiceWidth(names[k]) + 1;
+        return new int[] { x, rowY(row) + (ROW - CHOICE_H) / 2 + 1, choiceWidth(names[i]), CHOICE_H - 2 };
+    }
+
+    private static int[] rowsOf(final PlanPicture.Options o) {
+        return o.gif() ? GIF_ROWS : PNG_ROWS;
+    }
+
+    private static PlanPicture.Options with(final PlanPicture.Options o, final PlanPicture.Detail detail,
+        final boolean name, final boolean flows, final boolean transparent, final boolean annotations,
+        final boolean gif) {
+        return new PlanPicture.Options(detail, name, flows, transparent && !gif, annotations, gif);
     }
 
     private int[] saveRect() {
@@ -261,40 +306,44 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
 
         // The choices.
         final PlanPicture.Options o = chosen;
-        label(0, "Cards");
-        Hyb.rect(detailRect(0)[0] - 1, detailRect(0)[1] - 1, right - detailRect(0)[0] + 1, CHOICE_H, CardPaint.EDGE);
-        for (int i = 0; i < DETAILS.length; i++) {
-            final int[] r = detailRect(i);
-            final boolean picked = o.detail()
-                .ordinal() == i, hot = in(r, mx, my);
-            Hyb.rect(r[0], r[1], r[2], r[3], picked ? CONTROL_PICKED : hot ? CONTROL_HOVER : CONTROL);
-            Hyb.textCentered(
-                DETAILS[i],
-                r[0] + r[2] / 2f,
-                r[1] + (r[3] - 8) / 2f + 1,
-                picked || hot ? Hyb.INK : Hyb.MUTED);
+        final int[] rows = rowsOf(o);
+        for (int r = 0; r < rows.length; r++) {
+            switch (rows[r]) {
+                case FORMAT -> drawChoice(r, "Format", FORMATS, o.gif() ? 1 : 0, mx, my);
+                case CARDS -> drawChoice(
+                    r,
+                    "Cards",
+                    DETAILS,
+                    o.detail()
+                        .ordinal(),
+                    mx,
+                    my);
+                case NAME -> drawSwitch(r, "Plan name", o.name(), mx, my);
+                case FLOWS -> drawSwitch(r, "Inputs and outputs", o.flows(), mx, my);
+                case TRANSPARENT -> drawSwitch(r, "Transparent background", o.transparent(), mx, my);
+                default -> drawSwitch(r, "Show annotations", o.annotations(), mx, my);
+            }
         }
-        drawSwitch(1, "Plan name", o.name(), mx, my);
-        drawSwitch(2, "Inputs and outputs", o.flows(), mx, my);
-        drawSwitch(3, "Transparent background", o.transparent(), mx, my);
-        drawSwitch(4, "Show annotations", o.annotations(), mx, my);
-        if (!o.annotations())
-            Hyb.text(Hyb.fit("The embedded plan includes annotations.", right - col), col, rowY(5) - 4, Hyb.MUTED);
+        final int n = rows.length;
+        if (!o.annotations() && !o.gif())
+            Hyb.text(Hyb.fit("The embedded plan includes annotations.", right - col), col, rowY(n) - 4, Hyb.MUTED);
 
         // How big it comes out, and what Save or Copy did.
-        final int infoY = rowY(5) + 12;
-        Hyb.rect(col, rowY(5) + 6, right - col, 1, CardPaint.HAIR);
+        final int infoY = rowY(n) + 12;
+        Hyb.rect(col, rowY(n) + 6, right - col, 1, CardPaint.HAIR);
         if (picture != null && taking == null)
             Hyb.text(String.format("%,d x %,d pixels", picture.getWidth(), picture.getHeight()), col, infoY, Hyb.MUTED);
         if (status != null)
             Hyb.text(Hyb.fit(status, right - col), col, infoY + 12, statusGood ? Hyb.OK_INK : Hyb.AMBER_INK);
+        if (o.gif()) Hyb.text(Hyb.fit("Wires with flow move in the GIF.", right - col), col, infoY + 26, Hyb.MUTED);
 
         // Copy, and Save in cyan.
         final boolean on = ready();
         final int[] copy = copyRect(), save = saveRect();
-        final boolean copyHot = on && in(copy, mx, my), saveHot = on && in(save, mx, my);
+        final boolean canCopy = on && !o.gif();
+        final boolean copyHot = canCopy && in(copy, mx, my), saveHot = on && in(save, mx, my);
         Hyb.bevel(copy[0], copy[1], copy[2], copy[3], copyHot ? Hyb.KEY_HOVER : Hyb.KEY, Hyb.KEY_HI, Hyb.KEY_LO, 0, 1);
-        Hyb.textCentered("Copy", copy[0] + copy[2] / 2f, copy[1] + 5, on ? Hyb.INK : 0xFF5A5C65);
+        Hyb.textCentered("Copy", copy[0] + copy[2] / 2f, copy[1] + 5, canCopy ? Hyb.INK : 0xFF5A5C65);
         Hyb.rect(save[0], save[1], save[2], save[3], !on ? 0xFF1E6B78 : saveHot ? 0xFF38E1F5 : CYAN);
         Hyb.rect(save[0], save[1], save[2], 1, 0x66FFFFFF);
         final String saveLabel = keeping ? "..." : "Save";
@@ -319,6 +368,20 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
         else if (problem != null) {
             Hyb.textCentered("No picture", cx, cy - 10, Hyb.AMBER_INK);
             Hyb.textCentered(Hyb.fit(problem, wellW - 12), cx, cy + 2, Hyb.MUTED);
+        }
+    }
+
+    /** A row of choices, one picked, in a framed strip. */
+    private void drawChoice(final int row, final String text, final String[] names, final int picked, final int mx,
+        final int my) {
+        label(row, text);
+        final int[] first = choiceRect(names, row, 0);
+        Hyb.rect(first[0] - 1, first[1] - 1, right - first[0] + 1, CHOICE_H, CardPaint.EDGE);
+        for (int i = 0; i < names.length; i++) {
+            final int[] r = choiceRect(names, row, i);
+            final boolean on = picked == i, hot = in(r, mx, my);
+            Hyb.rect(r[0], r[1], r[2], r[3], on ? CONTROL_PICKED : hot ? CONTROL_HOVER : CONTROL);
+            Hyb.textCentered(names[i], r[0] + r[2] / 2f, r[1] + (r[3] - 8) / 2f + 1, on || hot ? Hyb.INK : Hyb.MUTED);
         }
     }
 
@@ -367,31 +430,47 @@ public final class ScreenshotPanel extends Widget<ScreenshotPanel> implements In
         } else if (in(copyRect(), mx, my) && ready()) {
             Hyb.click();
             copy();
-        } else if (mx >= col && mx < right && my >= rowY(0) && my < rowY(5)) {
+        } else if (mx >= col && mx < right && my >= rowY(0) && my < rowY(rowsOf(o).length)) {
             final int row = (my - rowY(0)) / ROW;
-            if (row == 0) {
-                for (int i = 0; i < DETAILS.length; i++) if (in(detailRect(i), mx, my) && i != o.detail()
-                    .ordinal()) {
-                        chosen = new PlanPicture.Options(
-                            PlanPicture.Detail.values()[i],
-                            o.name(),
-                            o.flows(),
-                            o.transparent(),
-                            o.annotations());
-                        Sfx.TICK.play(i > 0 ? 1.12f : 0.9f);
-                    }
-            } else if (row == 1) {
-                chosen = new PlanPicture.Options(o.detail(), !o.name(), o.flows(), o.transparent(), o.annotations());
-                (chosen.name() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
-            } else if (row == 2) {
-                chosen = new PlanPicture.Options(o.detail(), o.name(), !o.flows(), o.transparent(), o.annotations());
-                (chosen.flows() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
-            } else if (row == 3) {
-                chosen = new PlanPicture.Options(o.detail(), o.name(), o.flows(), !o.transparent(), o.annotations());
-                (chosen.transparent() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
-            } else {
-                chosen = new PlanPicture.Options(o.detail(), o.name(), o.flows(), o.transparent(), !o.annotations());
-                (chosen.annotations() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
+            switch (rowsOf(o)[row]) {
+                case FORMAT -> {
+                    for (int i = 0; i < FORMATS.length; i++)
+                        if (in(choiceRect(FORMATS, row, i), mx, my) && (i == 1) != o.gif()) {
+                            chosen = with(o, o.detail(), o.name(), o.flows(), o.transparent(), o.annotations(), i == 1);
+                            Sfx.TICK.play(i > 0 ? 1.12f : 0.9f);
+                        }
+                }
+                case CARDS -> {
+                    for (int i = 0; i < DETAILS.length; i++)
+                        if (in(choiceRect(DETAILS, row, i), mx, my) && i != o.detail()
+                            .ordinal()) {
+                                chosen = with(
+                                    o,
+                                    PlanPicture.Detail.values()[i],
+                                    o.name(),
+                                    o.flows(),
+                                    o.transparent(),
+                                    o.annotations(),
+                                    o.gif());
+                                Sfx.TICK.play(i > 0 ? 1.12f : 0.9f);
+                            }
+                }
+                case NAME -> {
+                    chosen = with(o, o.detail(), !o.name(), o.flows(), o.transparent(), o.annotations(), o.gif());
+                    (chosen.name() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
+                }
+                case FLOWS -> {
+                    chosen = with(o, o.detail(), o.name(), !o.flows(), o.transparent(), o.annotations(), o.gif());
+                    (chosen.flows() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
+                }
+                case TRANSPARENT -> {
+                    chosen = with(o, o.detail(), o.name(), o.flows(), !o.transparent(), o.annotations(), o.gif());
+                    (chosen.transparent() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
+                }
+                default -> {
+                    chosen = with(o, o.detail(), o.name(), o.flows(), o.transparent(), !o.annotations(), o.gif());
+                    (chosen.annotations() ? Sfx.TOGGLE_ON : Sfx.TOGGLE_OFF).play();
+                }
             }
             status = null;
         }

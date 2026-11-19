@@ -66,10 +66,16 @@ public final class PlanPicture {
      * the
      * board's paper is left out (the picture keeps its alpha), and whether the annotations are drawn.
      */
-    public record Options(Detail detail, boolean name, boolean flows, boolean transparent, boolean annotations) {
+    public record Options(Detail detail, boolean name, boolean flows, boolean transparent, boolean annotations,
+        boolean gif) {
 
         public Options(final Detail detail, final boolean name, final boolean flows) {
-            this(detail, name, flows, false, true);
+            this(detail, name, flows, false, true, false);
+        }
+
+        public Options(final Detail detail, final boolean name, final boolean flows, final boolean transparent,
+            final boolean annotations) {
+            this(detail, name, flows, transparent, annotations, false);
         }
     }
 
@@ -84,6 +90,8 @@ public final class PlanPicture {
     private static final int MIN_WIDTH = 240, MIN_WIDTH_FOOTER = 480;
 
     private static boolean drawing, bare, noNotes;
+    /** How far through its loop the wires' flow is in a GIF's frame; below zero in any other picture. */
+    private static float flow = -1;
 
     private PlanPicture() {}
 
@@ -102,6 +110,11 @@ public final class PlanPicture {
         return !(drawing && noNotes);
     }
 
+    /** How far through the loop the wires' flow dashes are (0 to under 1) while a GIF frame draws; else below zero. */
+    public static float flowPhase() {
+        return drawing ? flow : -1;
+    }
+
     // region Taking it
 
     private record Job(BoardCanvas canvas, Options options, Consumer<BufferedImage> done, Consumer<String> failed) {}
@@ -109,6 +122,8 @@ public final class PlanPicture {
     @Nullable
     private static Job queued;
     private static boolean ticking;
+    @Nullable
+    private static GifJob gifJob;
 
     /**
      * Takes a picture once this frame is done; {@code done} gets it, or {@code failed} why not, on the client thread.
@@ -130,15 +145,21 @@ public final class PlanPicture {
 
         @SubscribeEvent
         public void onRenderTick(final TickEvent.RenderTickEvent event) {
+            if (event.phase != TickEvent.Phase.END) return;
+            final GifJob gif = gifJob;
+            if (gif != null) {
+                gif.step();
+                return;
+            }
             final Job job = queued;
-            if (event.phase != TickEvent.Phase.END || job == null) return;
+            if (job == null) return;
             // A board laid out afresh this frame is drawn next frame.
             if (job.canvas()
                 .requiresResize()) return;
             queued = null;
             final BufferedImage image;
             try {
-                image = render(job.canvas(), job.options());
+                image = render(job.canvas(), job.options(), 0f);
             } catch (final RuntimeException | OutOfMemoryError e) {
                 GtnhPlanner.LOG.warn("Could not take a picture of the plan", e);
                 job.failed()
@@ -150,10 +171,13 @@ public final class PlanPicture {
         }
     }
 
-    private static BufferedImage render(final BoardCanvas canvas, final Options o) {
+    private static BufferedImage render(final BoardCanvas canvas, final Options o, final float phase) {
+        final boolean transparent = o.transparent() && !o.gif();
         final BoardSession session = canvas.session();
         final Graph g = session.graph();
-        final int maxSide = Math.min(MAX_SIDE, GL11.glGetInteger(GL30.GL_MAX_RENDERBUFFER_SIZE));
+        final int maxSide = Math
+            .min(o.gif() ? GifPicture.MAX_SIDE : MAX_SIDE, GL11.glGetInteger(GL30.GL_MAX_RENDERBUFFER_SIZE));
+        final long maxPixels = o.gif() ? GifPicture.MAX_PIXELS : MAX_PIXELS;
         // Pixels per GUI unit: the board's GUI scale, so the picture looks as the board does. A plan too big for
         // that gets fewer, then (at one) a smaller board.
         int scale = guiScale();
@@ -172,7 +196,7 @@ public final class PlanPicture {
             footer = o.name() || o.flows() ? new Footer(session, o, width) : null;
             height = boardH + (footer == null ? 0 : footer.height());
             final long pw = (long) width * scale, ph = (long) height * scale;
-            if (pw <= maxSide && ph <= maxSide && pw * ph <= MAX_PIXELS) break;
+            if (pw <= maxSide && ph <= maxSide && pw * ph <= maxPixels) break;
             if (scale > 1) scale--;
             else zoom *= 0.8f;
         }
@@ -228,12 +252,12 @@ public final class PlanPicture {
             GL11.glDepthMask(true);
             // A transparent picture is drawn twice, on black and on white, and told apart by matte(): the widgets'
             // own blend functions leave the framebuffer's alpha wrong. Any other picture is drawn once, on the paper.
-            final int[] backs = o.transparent() ? new int[] { 0xFF000000, 0xFFFFFFFF }
+            final int[] backs = transparent ? new int[] { 0xFF000000, 0xFFFFFFFF }
                 : new int[] { 0xFF000000 | Hyb.CANVAS };
             final BufferedImage image = new BufferedImage(
                 pw,
                 ph,
-                o.transparent() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+                transparent ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
             final int[] out = ((DataBufferInt) image.getRaster()
                 .getDataBuffer()).getData();
             int[] onWhite = null;
@@ -259,7 +283,8 @@ public final class PlanPicture {
                 context.pushMatrix();
                 context.resetCurrent();
                 drawing = true;
-                bare = o.transparent();
+                bare = transparent;
+                flow = o.gif() ? phase : -1;
                 noNotes = !o.annotations();
                 try {
                     WidgetTree.drawTree(canvas, context, true, true);
@@ -267,6 +292,7 @@ public final class PlanPicture {
                     drawing = false;
                     bare = false;
                     noNotes = false;
+                    flow = -1;
                     context.popMatrix();
                 }
 
@@ -297,6 +323,7 @@ public final class PlanPicture {
             drawing = false;
             bare = false;
             noNotes = false;
+            flow = -1;
             g.setZoom(zoomBefore);
             g.setPanX(panXBefore);
             g.setPanY(panYBefore);
@@ -320,6 +347,107 @@ public final class PlanPicture {
             if (fbo != 0) GL30.glDeleteFramebuffers(fbo);
             if (color != 0) GL30.glDeleteRenderbuffers(color);
             if (depth != 0) GL30.glDeleteRenderbuffers(depth);
+        }
+    }
+
+    /**
+     * Takes the plan's GIF: one frame at the end of each render tick (so the game never stops for more than a frame's
+     * drawing), the wires' flow stepped evenly round one loop; the palette, mapping and writing run on the pictures'
+     * thread. {@code progress} (frame, of) is told on the client thread; {@code done} gets the file, {@code failed}
+     * why not. A newer GIF replaces one under way.
+     */
+    public static void saveGif(final BoardCanvas canvas, final Options options, final String planName,
+        final java.util.function.BiConsumer<Integer, Integer> progress, final Consumer<File> done,
+        final Consumer<String> failed) {
+        final Options o = new Options(
+            options.detail(),
+            options.name(),
+            options.flows(),
+            false,
+            options.annotations(),
+            true);
+        gifJob = new GifJob(canvas, o, fileFor(planName, "gif"), progress, done, failed);
+        if (!ticking) {
+            ticking = true;
+            FMLCommonHandler.instance()
+                .bus()
+                .register(new Ticker());
+        }
+    }
+
+    /** A GIF being taken: its frames so far (as palette indexes), and where it is. */
+    private static final class GifJob {
+
+        private final BoardCanvas canvas;
+        private final Options options;
+        private final File file;
+        private final java.util.function.BiConsumer<Integer, Integer> progress;
+        private final Consumer<File> done;
+        private final Consumer<String> failed;
+        private int next;
+        private volatile int width, height;
+        private final List<byte[]> frames = java.util.Collections.synchronizedList(new ArrayList<>());
+        private volatile int[] palette;
+        private volatile boolean broken;
+
+        GifJob(final BoardCanvas canvas, final Options options, final File file,
+            final java.util.function.BiConsumer<Integer, Integer> progress, final Consumer<File> done,
+            final Consumer<String> failed) {
+            this.canvas = canvas;
+            this.options = options;
+            this.file = file;
+            this.progress = progress;
+            this.done = done;
+            this.failed = failed;
+        }
+
+        void step() {
+            if (canvas.requiresResize()) return;
+            if (broken) {
+                gifJob = null;
+                return;
+            }
+            final BufferedImage image;
+            try {
+                image = render(canvas, options, GifPicture.phase(next, GifPicture.FRAMES));
+            } catch (final RuntimeException | OutOfMemoryError e) {
+                GtnhPlanner.LOG.warn("Could not take a GIF of the plan", e);
+                gifJob = null;
+                broken = true;
+                failed.accept(e instanceof OutOfMemoryError ? "The plan is too big for a GIF" : reason(e));
+                return;
+            }
+            width = image.getWidth();
+            height = image.getHeight();
+            final boolean first = next == 0;
+            next++;
+            progress.accept(next, GifPicture.FRAMES);
+            final boolean last = next == GifPicture.FRAMES;
+            if (last) gifJob = null;
+            FILES.execute(() -> {
+                try {
+                    if (broken) return;
+                    final int[] rgb = ((DataBufferInt) image.getRaster()
+                        .getDataBuffer()).getData();
+                    // One palette for the whole loop, from the first frame: the flow's dashes are all in it.
+                    if (first) palette = GifPicture.palette(rgb, 256);
+                    frames.add(GifPicture.map(rgb, palette));
+                    if (!last) return;
+                    final File dir = file.getParentFile();
+                    if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("could not make " + dir);
+                    try (java.io.OutputStream out = new java.io.BufferedOutputStream(
+                        new java.io.FileOutputStream(file))) {
+                        GifPicture.write(out, frames, width, height, palette, GifPicture.DELAY_MS);
+                    }
+                    onClient(() -> done.accept(file));
+                } catch (final IOException | RuntimeException | OutOfMemoryError e) {
+                    broken = true;
+                    GtnhPlanner.LOG.warn("Could not save the GIF of the plan", e);
+                    onClient(
+                        () -> failed
+                            .accept(e instanceof OutOfMemoryError ? "The plan is too big for a GIF" : reason(e)));
+                }
+            });
         }
     }
 
@@ -625,6 +753,20 @@ public final class PlanPicture {
         return to;
     }
 
+    /** A file in the screenshots folder named for the plan and the time. */
+    private static File fileFor(final String planName, final String extension) {
+        final File dir = new File(Minecraft.getMinecraft().mcDataDir, "screenshots");
+        final String base = planName.replaceAll("[^A-Za-z0-9 _-]", "")
+            .trim()
+            .replace(' ', '_');
+        return new File(
+            dir,
+            (base.isEmpty() ? "plan" : base) + "_"
+                + new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(new Date())
+                + "."
+                + extension);
+    }
+
     /**
      * Saves the picture as a PNG in the game's screenshots folder, named for the plan; {@code done} gets the file.
      * {@code plan}, the plan's JSON as the website reads it, goes in the picture (library/PlanImage), so the picture
@@ -632,15 +774,8 @@ public final class PlanPicture {
      */
     public static void save(final BufferedImage image, final String planName, @Nullable final String plan,
         final Consumer<File> done, final Consumer<String> failed) {
-        final File dir = new File(Minecraft.getMinecraft().mcDataDir, "screenshots");
-        final String base = planName.replaceAll("[^A-Za-z0-9 _-]", "")
-            .trim()
-            .replace(' ', '_');
-        final File file = new File(
-            dir,
-            (base.isEmpty() ? "plan" : base) + "_"
-                + new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(new Date())
-                + ".png");
+        final File file = fileFor(planName, "png");
+        final File dir = file.getParentFile();
         FILES.execute(() -> {
             try {
                 if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("could not make " + dir);

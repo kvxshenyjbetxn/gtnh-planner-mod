@@ -700,8 +700,50 @@ final class WireLayer {
         com.cleanroommc.modularui.utils.Platform.setupDrawColor();
         org.lwjgl.opengl.GL11.glCallList(listId);
         drawRings(wires, hopped);
+        final float flow = PlanPicture.flowPhase();
+        if (flow >= 0) drawFlow(wires, flow);
         // The dots are for steering on the board: a picture of the plan leaves them out.
         if (!PlanPicture.drawing()) drawStops(wires);
+    }
+
+    /**
+     * The flow along every wire something runs through, in a GIF's frame: short bright dashes spaced evenly along the
+     * wire, moved on a whole dash period over one loop ({@code phase} 0 to under 1) so the last frame leads into the
+     * first. Not drawn on the board itself.
+     */
+    private void drawFlow(final List<Wire> wires, final float phase) {
+        // Never narrower than 4 screen pixels a dash, nor the period's dash than a third of it.
+        final float period = Math.max(32f, 14f / pixels), dash = period * 0.35f, offset = phase * period;
+        Hyb.beginBatch();
+        for (final Wire w : wires) {
+            if (w.perSecond() <= 0) continue;
+            final float width = Math.max(1.5f, atLeast(w.width()) * 0.5f);
+            final int color = 0xE0000000 | brighter(w.color(), 0.75f) & 0xFFFFFF;
+            final List<int[]> path = w.path();
+            float at = 0;
+            for (int i = 1; i < path.size(); i++) {
+                final int[] a = path.get(i - 1), b = path.get(i);
+                final float len = dist(a, b);
+                if (len > 0) {
+                    final float ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len;
+                    for (float s = (float) Math.floor((at - offset - dash) / period) * period + offset; s
+                        < at + len; s += period) {
+                        final float from = Math.max(s, at), to = Math.min(s + dash, at + len);
+                        if (to <= from) continue;
+                        segment(
+                            a[0] + ux * (from - at),
+                            a[1] + uy * (from - at),
+                            a[0] + ux * (to - at),
+                            a[1] + uy * (to - at),
+                            width,
+                            color,
+                            false);
+                    }
+                }
+                at += len;
+            }
+        }
+        Hyb.endBatch();
     }
 
     // region Steering dots
