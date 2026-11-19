@@ -3120,7 +3120,7 @@ public final class BoardSession {
         final Map<String, Double> made = new HashMap<>(), used = new HashMap<>();
         for (final TotalLine l : t.outputs()) made.merge(l.key(), l.amount(), Double::sum);
         for (final TotalLine l : t.inputs()) used.merge(l.key(), l.amount(), Double::sum);
-        return com.gtnhplanner.data.flowchart.PlanStats.of(t.euPerTick(), tier, counts, made, used);
+        return com.gtnhplanner.data.flowchart.PlanStats.of(t.euAverage(), tier, counts, made, used);
     }
 
     private static TotalLine line(final String key, final Look look, final double amount) {

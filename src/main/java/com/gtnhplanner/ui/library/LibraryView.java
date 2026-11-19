@@ -96,6 +96,7 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         MY_TIER,
         MY_POWER,
         MY_MAKES,
+        MY_FILTERS,
         MY_TAKES,
         TIER,
         VERSION,
@@ -374,16 +375,7 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         if (mine) {
             if (shelf == Shelf.MINE) {
                 right = key(right, mySort.label, Kind.MY_SORT, hover) - 4;
-                // The filters give way to the search box: each shows only while 110 px stay for it.
-                final String[] labels = { myMaxTier < 0 ? "Any tier" : "Up to " + TIERS[myMaxTier],
-                    myMaxPower < 0 ? "Any power" : "Up to " + Fmt.compact(powerCap(myMaxPower)) + " EU/t",
-                    myMakes.isEmpty() ? "Makes" : "Makes " + myMakes.size(),
-                    myTakes.isEmpty() ? "Takes" : "Takes " + myTakes.size() };
-                final Kind[] kinds = { Kind.MY_TIER, Kind.MY_POWER, Kind.MY_MAKES, Kind.MY_TAKES };
-                for (int i = 0; i < labels.length; i++) {
-                    if (right - x - Hyb.width(labels[i]) - 18 < 110) break;
-                    right = key(right, labels[i], kinds[i], hover) - 4;
-                }
+                right = myFilterKeys(x, right, hover);
                 right -= 4;
             }
             searchField.pos(x, 5)
@@ -1046,6 +1038,42 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
                 }
                 dropdown("gtnhplanner_library_my_power", rows, hit);
             }
+            case MY_FILTERS -> {
+                final List<PickList.Entry> rows = new ArrayList<>();
+                if (myMaxTier >= 0) rows.add(
+                    new PickList.Entry(null, "Up to " + TIERS[myMaxTier], "x", Hyb.INK, true, () -> myMaxTier = -1));
+                if (myMaxPower >= 0) rows.add(
+                    new PickList.Entry(
+                        null,
+                        "Up to " + Fmt.compact(powerCap(myMaxPower)) + " EU/t",
+                        "x",
+                        Hyb.INK,
+                        true,
+                        () -> myMaxPower = -1));
+                for (final String key : myMakes) rows.add(
+                    new PickList.Entry(
+                        com.gtnhplanner.ui.Resources.item(key),
+                        "Makes " + com.gtnhplanner.ui.Resources.name(key),
+                        "x",
+                        Hyb.INK,
+                        true,
+                        () -> myMakes.remove(key)));
+                for (final String key : myTakes) rows.add(
+                    new PickList.Entry(
+                        com.gtnhplanner.ui.Resources.item(key),
+                        "Takes " + com.gtnhplanner.ui.Resources.name(key),
+                        "x",
+                        Hyb.INK,
+                        true,
+                        () -> myTakes.remove(key)));
+                rows.add(new PickList.Entry(null, "Clear all", "", Hyb.INK, false, () -> {
+                    myMaxTier = -1;
+                    myMaxPower = -1;
+                    myMakes.clear();
+                    myTakes.clear();
+                }));
+                dropdown("gtnhplanner_library_my_filters", rows, hit);
+            }
             case MY_MAKES -> resourceMenu(myMakes, true, hit);
             case MY_TAKES -> resourceMenu(myTakes, false, hit);
             case SORT -> {
@@ -1213,6 +1241,54 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
             .isEmpty()) makingLabel = null;
         feed.set(q);
         scroll = 0;
+    }
+
+    /**
+     * The My plans filter keys, right to left from {@code right}, leaving 110 px for the search box. A filter that is
+     * set always shows (its short label when the long does not fit); unset ones show while there is room; if the set
+     * ones cannot all show, one "Filters (N)" key lists them to clear. Returns the new right edge.
+     */
+    private int myFilterKeys(final int x, int right, final Hit hover) {
+        final Kind[] kinds = { Kind.MY_TIER, Kind.MY_POWER, Kind.MY_MAKES, Kind.MY_TAKES };
+        final boolean[] set = { myMaxTier >= 0, myMaxPower >= 0, !myMakes.isEmpty(), !myTakes.isEmpty() };
+        final String[] unsetLabels = { "Any tier", "Any power", "Makes", "Takes" };
+        final String[] longLabels = { myMaxTier < 0 ? "" : "Up to " + TIERS[myMaxTier],
+            myMaxPower < 0 ? "" : "Up to " + Fmt.compact(powerCap(myMaxPower)) + " EU/t", "Makes " + myMakes.size(),
+            "Takes " + myTakes.size() };
+        final String[] shortLabels = { myMaxTier < 0 ? "" : TIERS[myMaxTier],
+            myMaxPower < 0 ? "" : Fmt.compact(powerCap(myMaxPower)), "M " + myMakes.size(), "T " + myTakes.size() };
+        int active = 0;
+        for (final boolean b : set) if (b) active++;
+        if (active == 0) {
+            for (int i = 0; i < 4; i++) {
+                if (right - x - Hyb.width(unsetLabels[i]) - 18 < 110) break;
+                right = key(right, unsetLabels[i], kinds[i], hover) - 4;
+            }
+            return right;
+        }
+        final int room = right - x - 110;
+        int need = 0, needShort = 0;
+        for (int i = 0; i < 4; i++) if (set[i]) {
+            need += Hyb.width(longLabels[i]) + 22;
+            needShort += Hyb.width(shortLabels[i]) + 22;
+        }
+        if (needShort > room) {
+            final String label = "Filters (" + active + ")";
+            return key(right, label, Kind.MY_FILTERS, hover) - 8;
+        }
+        final boolean longs = need <= room;
+        int left = room - (longs ? need : needShort);
+        for (int i = 0; i < 4; i++) {
+            if (set[i]) {
+                right = key(right, longs ? longLabels[i] : shortLabels[i], kinds[i], hover) - 4;
+            } else {
+                final int w = Hyb.width(unsetLabels[i]) + 22;
+                if (w > left) continue;
+                left -= w;
+                right = key(right, unsetLabels[i], kinds[i], hover) - 4;
+            }
+        }
+        return right;
     }
 
     /** The EU/t a tier tops out at: the most a plan may draw to pass a power filter of that tier. */
