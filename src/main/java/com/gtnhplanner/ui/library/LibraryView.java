@@ -266,9 +266,20 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
     @Nullable
     private String makingLabel;
 
+    /** Works out the stats the new sorts and filters need, while My plans shows. */
+    private final StatsBackfill backfill = new StatsBackfill();
+
+    @Override
+    public void dispose() {
+        backfill.stop();
+        super.dispose();
+    }
+
     @Override
     public void onUpdate() {
         super.onUpdate();
+        if (mine && shelf == Shelf.MINE) backfill.tick();
+        else backfill.stop();
         feed.poll();
         final String who = com.gtnhplanner.library.Account.username();
         if (!java.util.Objects.equals(who, listedFor)) {
@@ -672,6 +683,11 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
             top + (h - top) / 2f,
             Hyb.MUTED);
         contentH = (n + cols - 1) / cols * (TILE_H + GAP) + PAD;
+        // The sorts and filters by stats wait on plans not yet worked out.
+        final String working = shelf == Shelf.MINE && (filtered || mySort.ordinal() >= Plan.Sort.TIER.ordinal())
+            ? backfill.line()
+            : null;
+        if (working != null) Hyb.textRight(Hyb.fit(working, gridRight() - PAD), gridRight(), h - 11, Hyb.MUTED);
         final int visible = h - top, max = Math.max(0, contentH - visible);
         if (scroll > max) scroll = max;
         scroll = bar

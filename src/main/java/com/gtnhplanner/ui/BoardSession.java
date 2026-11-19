@@ -2859,6 +2859,14 @@ public final class BoardSession {
         } else if (graph.version() == seenVersion) {
             return;
         }
+        rebuild(answered);
+    }
+
+    /**
+     * The card and drawer models, notices and totals for {@link #graph} from {@link #result}: everything a tick does
+     * once the plan or its answer has moved. {@code answered}: a fresh answer arrived (the running sound listens).
+     */
+    private void rebuild(final boolean answered) {
         indexSharedMachines();
         seenVersion = graph.version();
         final Set<String> wired = wiredPorts();
@@ -3104,6 +3112,26 @@ public final class BoardSession {
             .thenComparing(m -> -m.euPerTick())
             .thenComparing(MachineLine::name));
         return new Totals(in, out, internal, eu, machines, euMade, euAverage);
+    }
+
+    /**
+     * The stats of a plan that is not open on the board, from an answer to its solve: the same models and totals the
+     * board builds, on a session that is never shown, so the numbers match those of an opened plan. Client thread
+     * (card models read NEI); the solve itself ran elsewhere.
+     */
+    @org.jetbrains.annotations.Nullable
+    public static com.gtnhplanner.data.flowchart.PlanStats statsFor(final Graph graph, final BalanceResult answer) {
+        if (!(answer instanceof BalanceResult.Solved)) return null;
+        final BoardSession scratch = new BoardSession(graph);
+        scratch.result = answer;
+        scratch.rebuild(false);
+        return libraryStats(scratch.totals);
+    }
+
+    /** A session that only works a plan out: no board, not the current session, its solver stopped. */
+    private BoardSession(final Graph graph) {
+        this.graph = graph;
+        solver.close();
     }
 
     /** What the Library sorts and filters this plan by ({@link com.gtnhplanner.data.flowchart.PlanStats}). */
