@@ -716,6 +716,7 @@ public final class NoteCard extends Widget<NoteCard> implements Interactable, ID
                     if (n.isDrawing()) {
                         n.setBorderColor(null);
                         n.setFillColor(null);
+                        n.setFillTheme(null);
                     }
                 });
             }));

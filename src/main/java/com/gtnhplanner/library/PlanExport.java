@@ -971,6 +971,8 @@ public final class PlanExport {
             style.addProperty("borderColor", n.getBorderColor());
         if (n.getFillColor() != null && COLOR_TAGS.contains(n.getFillColor()))
             style.addProperty("fillColor", n.getFillColor());
+        if (n.getFillTheme() != null && n.getFillTheme()
+            .length() <= 32) style.addProperty("fillTheme", n.getFillTheme());
         if (n.getFill() != null) style.addProperty("fill", n.getFill());
         if (n.getMarks() != null) style.addProperty("marks", n.getMarks());
         if (!style.entrySet()

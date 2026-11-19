@@ -164,6 +164,14 @@ public final class FfConverter {
             this.maker = maker;
             this.graph = new Graph(plan.name());
             if (plan.description() != null) this.graph.setDescription(plan.description());
+            if (plan.icon() != null) {
+                final String key = maker.resourceKey(
+                    plan.icon()
+                        .kind(),
+                    plan.icon()
+                        .resourceId());
+                if (key != null) this.graph.setIcon(key);
+            }
             this.ports = new FfCards.Ports(maker);
             this.ctx = new FfCards.Context(index, maker, plan.solveMode(), report);
             this.recipes = plan.recipesById();
@@ -1023,6 +1031,7 @@ public final class FfConverter {
             note.setBorder(d.border());
             note.setBorderColor(d.borderColor());
             note.setFillColor(d.fillColor());
+            note.setFillTheme(d.fillTheme());
             note.setFill(d.fill());
             note.setMarks(d.marks());
         }

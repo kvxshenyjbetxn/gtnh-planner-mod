@@ -61,6 +61,15 @@ public interface NodeMaker {
         return null;
     }
 
+    /**
+     * The board's resource key for an item or fluid by its website id and kind ({@code item} or {@code fluid}), the
+     * inverse of the export's resource id; null when the maker knows none or this game lacks the resource.
+     */
+    @Nullable
+    default String resourceKey(final String kind, final String id) {
+        return null;
+    }
+
     /** What a port of a node made here holds. */
     PortInfo describe(Port<?> port);
 

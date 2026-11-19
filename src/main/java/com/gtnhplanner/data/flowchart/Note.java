@@ -67,6 +67,9 @@ public class Note extends GraphData {
     /** Colour tags for the border and the fill; null is the note's own colour. */
     @Nullable
     private String borderColor, fillColor;
+    /** Box, zone: a canvas theme id (a textured paper). Not drawn; kept so a plan goes back out whole. */
+    @Nullable
+    private String fillTheme;
     /** Box, zone: the surface, {@code tint} (default), {@code solid} or {@code none}. */
     @Nullable
     private String fill;
@@ -185,6 +188,7 @@ public class Note extends GraphData {
         n.border = border;
         n.borderColor = borderColor;
         n.fillColor = fillColor;
+        n.fillTheme = fillTheme;
         n.fill = fill;
         n.marks = marks;
         return n;

@@ -135,8 +135,23 @@ public final class FfPlanParser {
             notes,
             ffBoards,
             boardOf,
-            str(root, "description", ""));
+            str(root, "description", ""),
+            icon(root));
         return migrateTrashCans(plan);
+    }
+
+    /**
+     * The plan's icon: an item or fluid with an id of 1 to 200 characters. Anything else is no icon, never a failed
+     * load.
+     */
+    @Nullable
+    private static FfPlan.FfIcon icon(final JsonObject root) {
+        final JsonObject o = obj(root, "icon");
+        if (o == null) return null;
+        final String kind = str(o, "kind"), id = str(o, "resourceId");
+        if (!"item".equals(kind) && !"fluid".equals(kind)) return null;
+        if (id == null || id.isEmpty() || id.length() > 200) return null;
+        return new FfPlan.FfIcon(kind, id);
     }
 
     /**
@@ -529,6 +544,9 @@ public final class FfPlanParser {
             if (marks == null) marks = fill;
             fill = "tint";
         } else if ("paper".equals(fill)) fill = "solid";
+        // A canvas theme id is at most 32 characters; a longer one is not the website's and is left out.
+        String fillTheme = style == null ? null : str(style, "fillTheme");
+        if (fillTheme != null && (fillTheme.isEmpty() || fillTheme.length() > 32)) fillTheme = null;
         List<double[]> points = null;
         if ("zone".equals(kind)) {
             points = new ArrayList<>();
@@ -557,7 +575,8 @@ public final class FfPlanParser {
                 fill,
                 marks,
                 str(a, "arrowHeads"),
-                (int) Math.round(num(a, "arrowWidth") == null ? 0 : num(a, "arrowWidth"))));
+                (int) Math.round(num(a, "arrowWidth") == null ? 0 : num(a, "arrowWidth")),
+                fillTheme));
     }
 
     // endregion
@@ -674,7 +693,8 @@ public final class FfPlanParser {
             notes,
             plan.boards(),
             plan.boardOf(),
-            plan.description());
+            plan.description(),
+            plan.icon());
     }
 
     private static String encode(final String id) {

@@ -174,6 +174,11 @@ public final class FakeGame implements RecipeIndex, NodeMaker {
     }
 
     @Override
+    public String resourceKey(final String kind, final String id) {
+        return FfIds.toKey(kind, id);
+    }
+
+    @Override
     public PortInfo describe(final Port<?> port) {
         final String name = TestIngredients.nameOf(port);
         final int bar = name.indexOf('|');

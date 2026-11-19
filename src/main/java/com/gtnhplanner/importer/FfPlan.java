@@ -25,7 +25,36 @@ import javax.annotation.Nullable;
 public record FfPlan(String name, boolean solveMode, boolean poolMode, boolean planMode, List<FfRecipe> recipes,
     List<FfNode> nodes, List<FfEdge> edges, List<FfStorage> storages, List<FfNote> textNotes,
     @Nullable FfTarget targetRate, List<String> notes, List<FfBoard> boards, Map<String, String> boardOf,
-    String description) {
+    String description, @Nullable FfIcon icon) {
+
+    /**
+     * The plan's face, an item or fluid by the website's id. {@code kind} is "item" or "fluid".
+     */
+    public record FfIcon(String kind, String resourceId) {}
+
+    /** A plan with boards and a description, and no icon. */
+    public FfPlan(final String name, final boolean solveMode, final boolean poolMode, final boolean planMode,
+        final List<FfRecipe> recipes, final List<FfNode> nodes, final List<FfEdge> edges,
+        final List<FfStorage> storages, final List<FfNote> textNotes, @Nullable final FfTarget targetRate,
+        final List<String> notes, final List<FfBoard> boards, final Map<String, String> boardOf,
+        final String description) {
+        this(
+            name,
+            solveMode,
+            poolMode,
+            planMode,
+            recipes,
+            nodes,
+            edges,
+            storages,
+            textNotes,
+            targetRate,
+            notes,
+            boards,
+            boardOf,
+            description,
+            null);
+    }
 
     /** A plan with boards and no description. */
     public FfPlan(final String name, final boolean solveMode, final boolean poolMode, final boolean planMode,
@@ -464,13 +493,14 @@ public record FfPlan(String name, boolean solveMode, boolean poolMode, boolean p
      */
     public record FfDrawing(String kind, @Nullable String arrowDirection, @Nullable List<double[]> points,
         @Nullable String imageUrl, @Nullable String border, @Nullable String borderColor, @Nullable String fillColor,
-        @Nullable String fill, @Nullable String marks, @Nullable String arrowHeads, int arrowWidth) {
+        @Nullable String fill, @Nullable String marks, @Nullable String arrowHeads, int arrowWidth,
+        @Nullable String fillTheme) {
 
         public FfDrawing(final String kind, @Nullable final String arrowDirection,
             @Nullable final List<double[]> points, @Nullable final String imageUrl, @Nullable final String border,
             @Nullable final String borderColor, @Nullable final String fillColor, @Nullable final String fill,
             @Nullable final String marks) {
-            this(kind, arrowDirection, points, imageUrl, border, borderColor, fillColor, fill, marks, null, 0);
+            this(kind, arrowDirection, points, imageUrl, border, borderColor, fillColor, fill, marks, null, 0, null);
         }
     }
 }

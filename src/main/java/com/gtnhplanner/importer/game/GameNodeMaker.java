@@ -105,6 +105,13 @@ public final class GameNodeMaker implements NodeMaker {
     }
 
     @Override
+    @Nullable
+    public String resourceKey(final String kind, final String id) {
+        return com.gtnhplanner.library.Posting
+            .keyOf(new com.gtnhplanner.library.CommunityApi.Resource(kind, id, "", 0));
+    }
+
+    @Override
     public PortInfo describe(final Port<?> port) {
         final Object value = port.getValue();
         final String key = Resources.key(port), label = port.getDisplayName();
