@@ -152,6 +152,18 @@ public final class PlannerSettings {
     /** Read on every wheel and every tip: kept, as the zoom is. */
     private static Boolean scrollChangesValues;
 
+    /**
+     * "Follow selection in Overview" (the website's overviewFollowsSelection): with cards, drawers or a group selected
+     * the overview's inputs, outputs and internal lists count only the selection. On by default, as there.
+     */
+    public static boolean overviewFollowsSelection() {
+        return bool("board.overviewFollowsSelection", true);
+    }
+
+    public static void setOverviewFollowsSelection(final boolean on) {
+        set("board.overviewFollowsSelection", on);
+    }
+
     public static boolean minimap() {
         return bool("minimap.on", false);
     }

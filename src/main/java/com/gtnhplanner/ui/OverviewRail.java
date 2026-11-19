@@ -332,7 +332,15 @@ final class OverviewRail extends ParentWidget<OverviewRail>
 
         // Heading: the title and the fold key.
         Hyb.rect(0, 0, w - 1, HEAD_H, Hyb.seeThrough(0xFF2A2D33, RAIL_FLOOR));
-        Hyb.text("OVERVIEW", 6, 5, Hyb.MUTED);
+        // With things selected the overview is about them (the setting "Follow selection in Overview").
+        selecting = PlannerSettings.overviewFollowsSelection() ? session.selectionView() : null;
+        if (selecting == null) Hyb.text("OVERVIEW", 6, 5, Hyb.MUTED);
+        else {
+            Hyb.text("SELECTION", 6, 5, Hyb.SELECTION);
+            final String what = selectionWords(selecting);
+            final int room = w - 4 - 14 - 4 - (6 + Hyb.width("SELECTION") + 6);
+            Hyb.text(Hyb.fit(what, room), 6 + Hyb.width("SELECTION") + 6, 5, Hyb.MUTED);
+        }
         final int fx = w - 4 - 14;
         Hyb.bevel(
             fx,
@@ -352,7 +360,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
         final int listY = LIST_Y;
         final BoardSession.Totals t = session.totals();
         inputs.clear();
-        inputs.addAll(t.inputs());
+        inputs.addAll(selecting == null ? t.inputs() : selecting.inputs());
         // When the plan's numbers change under the slider in hand (or under the mouse), lines above it can come or
         // go: the list is laid out once unseen first (nothing reaches the screen), so it is drawn already scrolled to
         // keep the slider where it was, never a frame out of place.
@@ -378,6 +386,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
         // Where things sit in the list does not depend on the scroll, so one correction holds.
         if (anchorShift != 0) scroll += anchorShift;
         Stencil.remove();
+        if (selecting != null) selectionFrame(w, h, listY, resourcesEnd);
         // Folding a section, or a slider kept still while lines above it go, can leave the list scrolled past an end:
         // once nothing is kept still it glides back (a quarter of the way a frame). A thin bar says when there is more.
         final int visible = h - listY, max = Math.max(0, contentH - visible);
@@ -416,9 +425,41 @@ final class OverviewRail extends ParentWidget<OverviewRail>
     /** The list under the heading and filter, from {@code y}: every section in turn. Returns where it ends. */
     private int list(final BoardSession.Totals t, int y, final int w, final float z, final Hit hover) {
         final Set<String> keys = new HashSet<>();
-        y = resources("INPUTS", t.inputs(), y, w, z, Hyb.SOURCE_INK, "-", "Nothing missing.", hover, keys);
-        y = resources("OUTPUTS", t.outputs(), y, w, z, Hyb.PRODUCT_INK, "+", "Nothing coming out yet.", hover, keys);
-        y = resources("INTERNAL", t.internal(), y, w, z, INTERNAL_INK, "", "Nothing internal.", hover, keys);
+        final BoardSession.SelectionView sel = selecting;
+        y = resources(
+            "INPUTS",
+            sel == null ? t.inputs() : sel.inputs(),
+            y,
+            w,
+            z,
+            Hyb.SOURCE_INK,
+            "-",
+            sel == null ? "Nothing missing." : "No inputs.",
+            hover,
+            keys);
+        y = resources(
+            "OUTPUTS",
+            sel == null ? t.outputs() : sel.outputs(),
+            y,
+            w,
+            z,
+            Hyb.PRODUCT_INK,
+            "+",
+            sel == null ? "Nothing coming out yet." : "No outputs.",
+            hover,
+            keys);
+        y = resources(
+            "INTERNAL",
+            sel == null ? t.internal() : sel.internal(),
+            y,
+            w,
+            z,
+            INTERNAL_INK,
+            "",
+            "Nothing internal.",
+            hover,
+            keys);
+        resourcesEnd = y;
         // A folded section keeps its sliders (a bar in hand among them keeps its place).
         for (final BoardSession.SpareLine line : session.spares())
             if (folded.contains(line.importing() ? "INPUTS" : "OUTPUTS")) keys.add(line.key());
@@ -530,6 +571,32 @@ final class OverviewRail extends ParentWidget<OverviewRail>
     /** Where the last section bar's title and count end: what comes after them on the bar gives way first. */
     private int headEnd;
 
+    /** What the overview is about this frame: the selection (when it follows it), else null. */
+    private BoardSession.SelectionView selecting;
+    /** Where the lists of resources end in the list's own coordinates, as last laid out. */
+    private int resourcesEnd;
+
+    /** "2 machines, 1 drawer" (the website's selection summary). */
+    private static String selectionWords(final BoardSession.SelectionView v) {
+        final String machines = v.machines() + (v.machines() == 1 ? " machine" : " machines");
+        final String drawers = v.drawers() + (v.drawers() == 1 ? " drawer" : " drawers");
+        if (v.drawers() == 0) return machines;
+        return v.machines() == 0 ? drawers : machines + ", " + drawers;
+    }
+
+    /**
+     * The frame round the heading and the selection's lists (the website's selection frame), in the selection colour,
+     * a pixel wide: it ends where the lists do, and the machines below it stay the whole plan's.
+     */
+    private static void selectionFrame(final int w, final int h, final int listY, final int end) {
+        final int bottom = Math.min(h, end - 2);
+        final int colour = Hyb.seeThrough(Hyb.SELECTION);
+        Hyb.rect(0, 0, w - 1, 1, colour);
+        Hyb.rect(0, 0, 1, Math.max(1, bottom), colour);
+        Hyb.rect(w - 2, 0, 1, Math.max(1, bottom), colour);
+        if (end - 2 > listY && end - 2 < h) Hyb.rect(0, end - 2, w - 1, 1, colour);
+    }
+
     private int section(final String title, final int count, final int shown, final int y, final int w, final int ink,
         final Hit hover) {
         final boolean isFolded = folded.contains(title);
@@ -591,22 +658,24 @@ final class OverviewRail extends ParentWidget<OverviewRail>
         // What the plan's spares carry is theirs: a line left with nothing but that (and no drawer) is not listed here.
         // A line at 0 (an unwired port's resource, or a drawer's) always is, so it can be set from here.
         final boolean internal = title.equals("INTERNAL"), sources = title.equals("INPUTS");
-        final Map<String, Double> spared = internal ? Map.of() : spared(sources);
+        // Selected, the lines are plain readings: no spares, no drawer or port setters (the website hides them there).
+        final boolean plain = internal || selecting != null;
+        final Map<String, Double> spared = plain ? Map.of() : spared(sources);
         final List<BoardSession.TotalLine> kept = new ArrayList<>();
         final Map<BoardSession.TotalLine, Double> amounts = new HashMap<>();
         for (final BoardSession.TotalLine line : lines) {
             final double left = Math.max(0, line.amount() - spared.getOrDefault(line.key(), 0.0));
-            if (!internal && line.amount() > RailTotals.EPS
+            if (!plain && line.amount() > RailTotals.EPS
                 && left <= Math.max(RailTotals.EPS, line.amount() * 1e-4)
                 && drawersFor(line, sources).isEmpty()
                 && pinsFor(line, sources).isEmpty()) continue;
             kept.add(line);
-            amounts.put(line, internal ? line.amount() : left);
+            amounts.put(line, plain ? line.amount() : left);
         }
         final List<BoardSession.TotalLine> shown = new ArrayList<>();
         for (final BoardSession.TotalLine line : kept) if (matches(line.label())) shown.add(line);
         // The spares with a choice of place come after the lines, as blocks of their own.
-        final List<BoardSession.SpareLine> groups = internal ? List.of() : groups(sources);
+        final List<BoardSession.SpareLine> groups = plain ? List.of() : groups(sources);
         y = section(title, kept.size() + groups.size(), shown.size() + groups.size(), y, w, ink, hover);
         // Every section's numbers in one column, left of where the drawer controls sit (empty on internal lines).
         final int rateRight = w - 6 - CONTROLS_W - 3;
@@ -623,7 +692,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
             final boolean hot = hover != null && hover.data() == line && hover.kind() == Kind.RESOURCE;
             final double amount = amounts.get(line);
             // One line per drawer or port: the resource's own line carries the first; any more get a short line each.
-            final int setters = internal ? 0 : drawersFor(line, sources).size() + pinsFor(line, sources).size();
+            final int setters = plain ? 0 : drawersFor(line, sources).size() + pinsFor(line, sources).size();
             final int rows = Math.max(1, setters);
             final int h = ROW_H + (rows - 1) * DRAWER_H;
             // Scrolled out of the list: nothing to draw (a long plan has hundreds of rows, and every icon costs).
@@ -633,7 +702,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
             }
             // What sets it: its drawers, then the ports set to a rate on their cards.
             final List<Object> drawers = new ArrayList<>(setters);
-            if (!internal) {
+            if (!plain) {
                 drawers.addAll(drawersFor(line, sources));
                 drawers.addAll(pinsFor(line, sources));
             }
@@ -661,7 +730,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
             Hyb.text(Hyb.fit(line.label(), rateRight - rateW - 4 - NAME_X), NAME_X, y + 3, hot ? Hyb.GOLD : Hyb.INK);
             Hyb.text(number, rateRight - rateW, y + 3, energy ? Hyb.ENERGY : amount > 0 ? ink : Hyb.MUTED);
             Hyb.text(suffix, rateRight - Hyb.width(suffix), y + 3, energy ? Hyb.ENERGY_TAIL : Hyb.MUTED);
-            if (drawers.isEmpty() && !internal && !eu && !openPorts(line, sources).isEmpty())
+            if (drawers.isEmpty() && !plain && !eu && !openPorts(line, sources).isEmpty())
                 lineControls(line, y + 1, w, hover);
             if (!drawers.isEmpty()) {
                 setterControls(drawers.get(0), y + 1, w, hover);
@@ -679,7 +748,7 @@ final class OverviewRail extends ParentWidget<OverviewRail>
             hits.add(new Hit(Kind.RESOURCE, 0, y, w - 1, y + h, line));
             y += h;
         }
-        if (!internal) y = spareGroups(sources, y, w, z, hover, keys);
+        if (!plain) y = spareGroups(sources, y, w, z, hover, keys);
         return y + GAP;
     }
 

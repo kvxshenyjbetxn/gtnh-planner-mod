@@ -2957,6 +2957,118 @@ public final class BoardSession {
         return totals;
     }
 
+    /**
+     * The overview while things are selected ("Follow selection in Overview"): the resources crossing the selection,
+     * biggest first, and what it holds.
+     */
+    public record SelectionView(int machines, int drawers, List<TotalLine> inputs, List<TotalLine> outputs,
+        List<TotalLine> internal) {}
+
+    private SelectionView selectionView;
+    private Set<UUID> selectionSeen = Set.of();
+    private Object selectionModels, selectionDrawers;
+
+    /**
+     * What the selection takes in, gives out and keeps inside (the rules are {@link SelectionFlow}); null with no card
+     * or drawer selected. Worked out again only when the selection or the solve's cards change.
+     */
+    @Nullable
+    public SelectionView selectionView() {
+        if (selection.isEmpty()) return null;
+        if (selectionModels == models && selectionDrawers == drawerModels && selectionSeen.equals(selection))
+            return selectionView;
+        selectionSeen = Set.copyOf(selection);
+        selectionModels = models;
+        selectionDrawers = drawerModels;
+        return selectionView = buildSelectionView();
+    }
+
+    private SelectionView buildSelectionView() {
+        // A group is everything in it; a shared machine's card is every recipe on it.
+        final Set<UUID> ids = new HashSet<>();
+        for (final UUID id : selection) {
+            if (graph.boardGroups.containsKey(id))
+                ids.addAll(com.gtnhplanner.data.flowchart.Groups.descendants(graph, id));
+            else ids.add(id);
+        }
+        for (final UUID id : new ArrayList<>(ids)) if (graph.nodes.containsKey(id)) ids.addAll(sectionsOf(id));
+        int cards = 0, drawers = 0;
+        for (final UUID id : ids) {
+            if (graph.nodes.containsKey(id)) cards++;
+            else if (graph.drawers.containsKey(id)) drawers++;
+        }
+        if (cards == 0 && drawers == 0) return null;
+        final List<SelectionFlow.Wire> wires = new ArrayList<>();
+        for (final Edge e : graph.getEdges()) {
+            final Node src = graph.nodes.get(e.sourceNodeId);
+            if (src == null || e.sourceOutputIndex >= src.outputs.size()) continue;
+            wires.add(
+                new SelectionFlow.Wire(
+                    e.sourceNodeId,
+                    e.targetNodeId,
+                    canonicalKey(Resources.key(src.outputs.get(e.sourceOutputIndex))),
+                    com.gtnhplanner.ui.canvas.WireRates.edge(result, e)));
+        }
+        final List<SelectionFlow.Held> held = new ArrayList<>();
+        for (final Drawer d : graph.getDrawers()) {
+            final DrawerModel model = drawerModels.get(d.getId());
+            held.add(
+                new SelectionFlow.Held(
+                    d.getId(),
+                    d.getKind() == Drawer.Kind.SOURCE ? SelectionFlow.Role.SOURCE
+                        : d.getKind() == Drawer.Kind.PRODUCT || d.getKind() == Drawer.Kind.BYPRODUCT
+                            ? SelectionFlow.Role.PRODUCT
+                            : SelectionFlow.Role.OTHER,
+                    canonicalKey(d.getResourceKey()),
+                    model == null ? 0 : Math.max(0, model.rate)));
+            final List<Drawer.Link> all = new ArrayList<>(d.getLinks());
+            all.addAll(d.getTakers());
+            for (final Drawer.Link link : all) {
+                final Node n = graph.nodes.get(link.nodeId());
+                if (n == null) continue;
+                final boolean input = d.sideOf(link);
+                final List<Port<?>> ports = input ? n.inputs : n.outputs;
+                if (link.portIndex() >= ports.size()) continue;
+                final double rate = d.isBuffer()
+                    ? com.gtnhplanner.ui.canvas.WireRates.buffer(
+                        result,
+                        d,
+                        new com.gtnhplanner.data.flowchart.balancer.PortRef(n.id, link.portIndex(), input))
+                    : com.gtnhplanner.ui.canvas.WireRates.link(result, n, input, link.portIndex());
+                final String key = canonicalKey(Resources.key(ports.get(link.portIndex())));
+                wires.add(
+                    input ? new SelectionFlow.Wire(d.getId(), n.id, key, rate)
+                        : new SelectionFlow.Wire(n.id, d.getId(), key, rate));
+            }
+        }
+        // Where the plan meets the outside at a card: a port nothing is wired to, and an open gate on a wired one.
+        final List<SelectionFlow.Open> opens = new ArrayList<>();
+        for (final CardModel card : models.values()) {
+            for (final boolean input : new boolean[] { true, false }) {
+                for (final CardModel.PortView p : input ? card.inputs : card.outputs) {
+                    final double rate = p.wired() ? p.extra() : p.perSecond();
+                    if (rate > 0) opens.add(new SelectionFlow.Open(card.node.id, input, canonicalKey(p.key()), rate));
+                }
+            }
+        }
+        final SelectionFlow.Flows flows = SelectionFlow.measure(ids, wires, opens, held);
+        return new SelectionView(
+            cards,
+            drawers,
+            selectionLines(flows.inputs()),
+            selectionLines(flows.outputs()),
+            selectionLines(flows.internal()));
+    }
+
+    /** The lines of a selection's flows, biggest first, those under solver noise left out. */
+    private List<TotalLine> selectionLines(final Map<String, Double> flows) {
+        final List<TotalLine> out = new ArrayList<>();
+        for (final Map.Entry<String, Double> e : flows.entrySet())
+            if (e.getValue() > RailTotals.EPS) out.add(line(e.getKey(), null, e.getValue()));
+        out.sort((x, y) -> Double.compare(y.amount(), x.amount()));
+        return out;
+    }
+
     /** A resource's name and icon, from the first port or drawer that holds it. */
     private record Look(String label, ItemStack item, net.minecraftforge.fluids.FluidStack fluid) {}
 
