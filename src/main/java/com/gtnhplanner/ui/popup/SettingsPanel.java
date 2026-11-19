@@ -234,6 +234,12 @@ public final class SettingsPanel extends Widget<SettingsPanel> implements Intera
                         null,
                         PlannerSettings::scrollChangesValues,
                         PlannerSettings::setScrollChangesValues).about("Scroll over a number or chip to change it."),
+                    toggle(
+                        "Follow selection in Overview",
+                        null,
+                        PlannerSettings::overviewFollowsSelection,
+                        PlannerSettings::setOverviewFollowsSelection)
+                            .about("The overview counts only what you select."),
                     new Row(
                         "See-through",
                         null,

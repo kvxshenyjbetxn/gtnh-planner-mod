@@ -15,7 +15,6 @@ import com.gtnhplanner.data.flowchart.Graph;
 import com.gtnhplanner.data.flowchart.Node;
 import com.gtnhplanner.data.flowchart.Port;
 import com.gtnhplanner.data.flowchart.balancer.BalanceResult;
-import com.gtnhplanner.data.flowchart.balancer.Balancer;
 import com.gtnhplanner.data.flowchart.balancer.PortRef;
 import com.gtnhplanner.layout.WireHops;
 import com.gtnhplanner.layout.WireRouter;
@@ -552,29 +551,16 @@ final class WireLayer {
     }
 
     private static double edgeFlow(@Nullable final BalanceResult result, final Edge e) {
-        if (result == null) return 0;
-        if (result instanceof final BalanceResult.Solved solved && solved.auto() != null) {
-            final Double f = solved.auto().edgeFlowsPerSecond.get(e.id);
-            if (f != null) return f;
-        }
-        final Balancer.NodeBalance b = result.nodeBalances()
-            .get(e.sourceNodeId);
-        return b == null ? 0 : b.outputPerSecond(e.sourceOutputIndex);
+        return WireRates.edge(result, e);
     }
 
-    /** What passes through one of a buffer's ports: the solver's flow on its edges there, not the port's whole rate. */
     private static double bufferFlow(@Nullable final BalanceResult result, final Drawer d, final PortRef port) {
-        if (!(result instanceof final BalanceResult.Solved solved) || solved.auto() == null) return 0;
-        return solved.auto().drawers.portRate(d.getId(), port);
+        return WireRates.buffer(result, d, port);
     }
 
     private static double linkFlow(@Nullable final BalanceResult result, final Node n, final boolean input,
         final int port) {
-        if (result == null) return 0;
-        final Balancer.NodeBalance b = result.nodeBalances()
-            .get(n.id);
-        if (b == null) return 0;
-        return input ? b.inputPerSecond(port) : b.outputPerSecond(port);
+        return WireRates.link(result, n, input, port);
     }
 
     /**
