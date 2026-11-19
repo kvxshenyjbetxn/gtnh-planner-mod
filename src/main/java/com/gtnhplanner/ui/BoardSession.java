@@ -2898,6 +2898,7 @@ public final class BoardSession {
         loopCards = Loops.cardTones(upToLoops, this::hostOf);
         notices = buildNotices(next);
         totals = buildTotals(next);
+        if (result instanceof BalanceResult.Solved) graph.setStats(libraryStats(totals));
         spareLines = buildSpares(next);
         if (answered) heardRunning(next);
     }
@@ -3215,6 +3216,23 @@ public final class BoardSession {
             .thenComparing(m -> -m.euPerTick())
             .thenComparing(MachineLine::name));
         return new Totals(in, out, internal, eu, machines, euMade, euAverage);
+    }
+
+    /** What the Library sorts and filters this plan by ({@link com.gtnhplanner.data.flowchart.PlanStats}). */
+    private static com.gtnhplanner.data.flowchart.PlanStats libraryStats(final Totals t) {
+        int tier = -1;
+        final double[] counts = new double[t.machines()
+            .size()];
+        for (int i = 0; i < counts.length; i++) {
+            final MachineLine m = t.machines()
+                .get(i);
+            counts[i] = m.machines();
+            if (m.tier() != null) tier = Math.max(tier, CardDefaults.tierIndex(m.tier()));
+        }
+        final Map<String, Double> made = new HashMap<>(), used = new HashMap<>();
+        for (final TotalLine l : t.outputs()) made.merge(l.key(), l.amount(), Double::sum);
+        for (final TotalLine l : t.inputs()) used.merge(l.key(), l.amount(), Double::sum);
+        return com.gtnhplanner.data.flowchart.PlanStats.of(t.euAverage(), tier, counts, made, used);
     }
 
     private static TotalLine line(final String key, final Look look, final double amount) {

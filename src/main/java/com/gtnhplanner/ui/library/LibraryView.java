@@ -55,6 +55,13 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
     /** How My plans is ordered; kept while the game runs, not saved. */
     private static Plan.Sort mySort = Plan.Sort.LAST_OPENED;
 
+    /**
+     * My plans' filters, kept while the game runs like the sort: highest tier index and EU/t (-1 for any), resources.
+     */
+    private static int myMaxTier = -1, myMaxPower = -1;
+    private static final java.util.Set<String> myMakes = new java.util.LinkedHashSet<>(),
+        myTakes = new java.util.LinkedHashSet<>();
+
     private static final String[] TIERS = { "ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV",
         "UIV", "UMV", "UXV", "MAX" };
 
@@ -86,6 +93,11 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
     private enum Kind {
         SORT,
         MY_SORT,
+        MY_TIER,
+        MY_POWER,
+        MY_MAKES,
+        MY_FILTERS,
+        MY_TAKES,
         TIER,
         VERSION,
         CLOSE,
@@ -361,7 +373,11 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         int right = w - PAD;
         right = closeKey(right, 4, Kind.CLOSE, hover) - 8;
         if (mine) {
-            if (shelf == Shelf.MINE) right = key(right, mySort.label, Kind.MY_SORT, hover) - 8;
+            if (shelf == Shelf.MINE) {
+                right = key(right, mySort.label, Kind.MY_SORT, hover) - 4;
+                right = myFilterKeys(x, right, hover);
+                right -= 4;
+            }
             searchField.pos(x, 5)
                 .size(Math.max(80, Math.min(240, right - x)), 14);
             return;
@@ -621,9 +637,18 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         final String f = searchText.trim()
             .toLowerCase(Locale.ROOT);
         final List<Integer> shown = new ArrayList<>();
+        final boolean filtered = !sharedShelf
+            && (myMaxTier >= 0 || myMaxPower >= 0 || !myMakes.isEmpty() || !myTakes.isEmpty());
         for (final int i : plan.ordered(sharedShelf ? Plan.Sort.LAST_OPENED : mySort)) {
             final boolean theirs = cloud != null && cloud.shared(graphs.get(i));
             if (theirs != sharedShelf) continue;
+            if (filtered && !com.gtnhplanner.data.flowchart.PlanStats.passes(
+                graphs.get(i)
+                    .getStats(),
+                myMaxTier,
+                myMaxPower < 0 ? -1 : powerCap(myMaxPower),
+                myMakes,
+                myTakes)) continue;
             if (f.isEmpty() || graphs.get(i)
                 .getName()
                 .toLowerCase(Locale.ROOT)
@@ -631,7 +656,7 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         }
         final int cols = columns(), tw = tileW(), y0 = top + PAD - scroll;
         int n = 0;
-        if (f.isEmpty() && !sharedShelf) {
+        if (f.isEmpty() && !filtered && !sharedShelf) {
             newTile(PAD, y0, tw, hover);
             n = 1;
         }
@@ -641,7 +666,8 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
             n++;
         }
         if (n == 0) Hyb.textCentered(
-            sharedShelf && f.isEmpty() ? "Nothing shared with you yet" : "No plan by that name.",
+            sharedShelf && f.isEmpty() ? "Nothing shared with you yet"
+                : filtered ? "No plan fits those filters." : "No plan by that name.",
             (PAD + gridRight()) / 2f,
             top + (h - top) / 2f,
             Hyb.MUTED);
@@ -979,6 +1005,77 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
                     rows.add(new PickList.Entry(null, s.label, "", Hyb.INK, s == mySort, () -> mySort = s));
                 dropdown("gtnhplanner_library_my_sort", rows, hit);
             }
+            case MY_TIER -> {
+                final List<PickList.Entry> rows = new ArrayList<>();
+                rows.add(new PickList.Entry(null, "Any tier", "", Hyb.INK, myMaxTier < 0, () -> myMaxTier = -1));
+                for (int i = 0; i < TIERS.length; i++) {
+                    final int t = i;
+                    rows.add(
+                        new PickList.Entry(
+                            null,
+                            "Up to " + TIERS[i],
+                            "",
+                            Hyb.tier(TIERS[i])
+                                .bg(),
+                            myMaxTier == i,
+                            () -> myMaxTier = t));
+                }
+                dropdown("gtnhplanner_library_my_tier", rows, hit);
+            }
+            case MY_POWER -> {
+                final List<PickList.Entry> rows = new ArrayList<>();
+                rows.add(new PickList.Entry(null, "Any power", "", Hyb.INK, myMaxPower < 0, () -> myMaxPower = -1));
+                for (int i = 0; i < TIERS.length; i++) {
+                    final int t = i;
+                    rows.add(
+                        new PickList.Entry(
+                            null,
+                            "Up to " + Fmt.compact(powerCap(i)) + " EU/t",
+                            TIERS[i],
+                            Hyb.INK,
+                            myMaxPower == i,
+                            () -> myMaxPower = t));
+                }
+                dropdown("gtnhplanner_library_my_power", rows, hit);
+            }
+            case MY_FILTERS -> {
+                final List<PickList.Entry> rows = new ArrayList<>();
+                if (myMaxTier >= 0) rows.add(
+                    new PickList.Entry(null, "Up to " + TIERS[myMaxTier], "x", Hyb.INK, true, () -> myMaxTier = -1));
+                if (myMaxPower >= 0) rows.add(
+                    new PickList.Entry(
+                        null,
+                        "Up to " + Fmt.compact(powerCap(myMaxPower)) + " EU/t",
+                        "x",
+                        Hyb.INK,
+                        true,
+                        () -> myMaxPower = -1));
+                for (final String key : myMakes) rows.add(
+                    new PickList.Entry(
+                        com.gtnhplanner.ui.Resources.item(key),
+                        "Makes " + com.gtnhplanner.ui.Resources.name(key),
+                        "x",
+                        Hyb.INK,
+                        true,
+                        () -> myMakes.remove(key)));
+                for (final String key : myTakes) rows.add(
+                    new PickList.Entry(
+                        com.gtnhplanner.ui.Resources.item(key),
+                        "Takes " + com.gtnhplanner.ui.Resources.name(key),
+                        "x",
+                        Hyb.INK,
+                        true,
+                        () -> myTakes.remove(key)));
+                rows.add(new PickList.Entry(null, "Clear all", "", Hyb.INK, false, () -> {
+                    myMaxTier = -1;
+                    myMaxPower = -1;
+                    myMakes.clear();
+                    myTakes.clear();
+                }));
+                dropdown("gtnhplanner_library_my_filters", rows, hit);
+            }
+            case MY_MAKES -> resourceMenu(myMakes, true, hit);
+            case MY_TAKES -> resourceMenu(myTakes, false, hit);
             case SORT -> {
                 final List<PickList.Entry> rows = new ArrayList<>();
                 for (final String[] s : SORTS) rows.add(
@@ -1146,10 +1243,96 @@ public final class LibraryView extends ParentWidget<LibraryView> implements Inte
         scroll = 0;
     }
 
+    /**
+     * The My plans filter keys, right to left from {@code right}, leaving 110 px for the search box. A filter that is
+     * set always shows (its short label when the long does not fit); unset ones show while there is room; if the set
+     * ones cannot all show, one "Filters (N)" key lists them to clear. Returns the new right edge.
+     */
+    private int myFilterKeys(final int x, int right, final Hit hover) {
+        final Kind[] kinds = { Kind.MY_TIER, Kind.MY_POWER, Kind.MY_MAKES, Kind.MY_TAKES };
+        final boolean[] set = { myMaxTier >= 0, myMaxPower >= 0, !myMakes.isEmpty(), !myTakes.isEmpty() };
+        final String[] unsetLabels = { "Any tier", "Any power", "Makes", "Takes" };
+        final String[] longLabels = { myMaxTier < 0 ? "" : "Up to " + TIERS[myMaxTier],
+            myMaxPower < 0 ? "" : "Up to " + Fmt.compact(powerCap(myMaxPower)) + " EU/t", "Makes " + myMakes.size(),
+            "Takes " + myTakes.size() };
+        final String[] shortLabels = { myMaxTier < 0 ? "" : TIERS[myMaxTier],
+            myMaxPower < 0 ? "" : Fmt.compact(powerCap(myMaxPower)), "M " + myMakes.size(), "T " + myTakes.size() };
+        int active = 0;
+        for (final boolean b : set) if (b) active++;
+        if (active == 0) {
+            for (int i = 0; i < 4; i++) {
+                if (right - x - Hyb.width(unsetLabels[i]) - 18 < 110) break;
+                right = key(right, unsetLabels[i], kinds[i], hover) - 4;
+            }
+            return right;
+        }
+        final int room = right - x - 110;
+        int need = 0, needShort = 0;
+        for (int i = 0; i < 4; i++) if (set[i]) {
+            need += Hyb.width(longLabels[i]) + 22;
+            needShort += Hyb.width(shortLabels[i]) + 22;
+        }
+        if (needShort > room) {
+            final String label = "Filters (" + active + ")";
+            return key(right, label, Kind.MY_FILTERS, hover) - 8;
+        }
+        final boolean longs = need <= room;
+        int left = room - (longs ? need : needShort);
+        for (int i = 0; i < 4; i++) {
+            if (set[i]) {
+                right = key(right, longs ? longLabels[i] : shortLabels[i], kinds[i], hover) - 4;
+            } else {
+                final int w = Hyb.width(unsetLabels[i]) + 22;
+                if (w > left) continue;
+                left -= w;
+                right = key(right, unsetLabels[i], kinds[i], hover) - 4;
+            }
+        }
+        return right;
+    }
+
+    /** The EU/t a tier tops out at: the most a plan may draw to pass a power filter of that tier. */
+    private static double powerCap(final int tier) {
+        return 8L << (2 * tier);
+    }
+
+    /**
+     * The resources the player's plans make (or take), to tick in or out of a My plans filter; the ones chosen show
+     * even when no plan has them any more.
+     */
+    private void resourceMenu(final java.util.Set<String> chosen, final boolean makes, final Hit hit) {
+        final java.util.TreeMap<String, String> found = new java.util.TreeMap<>();
+        for (final Graph g : Plan.getInstance()
+            .getGraphs()) {
+            final com.gtnhplanner.data.flowchart.PlanStats st = g.getStats();
+            if (st != null) for (final String key : makes ? st.makes() : st.takes())
+                found.put(com.gtnhplanner.ui.Resources.name(key), key);
+        }
+        for (final String key : chosen) found.put(com.gtnhplanner.ui.Resources.name(key), key);
+        final List<PickList.Entry> rows = new ArrayList<>();
+        rows.add(new PickList.Entry(null, "Any", "", Hyb.INK, chosen.isEmpty(), chosen::clear));
+        for (final Map.Entry<String, String> e : found.entrySet()) {
+            final String key = e.getValue();
+            rows.add(
+                new PickList.Entry(
+                    com.gtnhplanner.ui.Resources.item(key),
+                    e.getKey(),
+                    "",
+                    Hyb.INK,
+                    chosen.contains(key),
+                    () -> { if (!chosen.remove(key)) chosen.add(key); }));
+        }
+        dropdown(makes ? "gtnhplanner_library_my_makes" : "gtnhplanner_library_my_takes", rows, hit, true);
+    }
+
     private void dropdown(final String name, final List<PickList.Entry> rows, final Hit hit) {
+        dropdown(name, rows, hit, false);
+    }
+
+    private void dropdown(final String name, final List<PickList.Entry> rows, final Hit hit, final boolean filterable) {
         Popup.open(
             getPanel(),
-            PickList.popup(name, null, rows, false, hit.x1() - hit.x0(), 16),
+            PickList.popup(name, null, rows, filterable, hit.x1() - hit.x0(), 16),
             getArea().x + hit.x0(),
             getArea().y + hit.y1() + 2);
     }

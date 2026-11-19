@@ -143,6 +143,10 @@ public final class Serializer {
             slotObj.addProperty("name", graph.getName());
             if (graph.getLastOpen() > 0) slotObj.addProperty("lastOpen", graph.getLastOpen());
             if (graph.getEditedAt() > 0) slotObj.addProperty("editedAt", graph.getEditedAt());
+            if (graph.getStats() != null) slotObj.add(
+                "stats",
+                graph.getStats()
+                    .toJson());
             if (graph.getCreatedAt() > 0) slotObj.addProperty("createdAt", graph.getCreatedAt());
             if (!graph.isOpen()) slotObj.addProperty("open", false);
             if (graph.getPostId() != null) slotObj.addProperty("postId", graph.getPostId());
@@ -245,6 +249,7 @@ public final class Serializer {
                 graph.setEditedAt(
                     obj.has("editedAt") ? obj.get("editedAt")
                         .getAsLong() : graph.getLastOpen());
+                graph.setStats(PlanStats.fromJson(obj.get("stats")));
                 graph.setCreatedAt(
                     obj.has("createdAt") ? obj.get("createdAt")
                         .getAsLong() : 0);
